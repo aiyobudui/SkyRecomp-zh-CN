@@ -176,7 +176,7 @@ static int row(const char *label, const std::string &value, bool changed, const 
 }
 
 bool opt_toggle(const char *label, bool *v, bool def, const char *desc) {
-    if (!row(label, *v ? "On" : "Off", *v != def, desc, true, false, *v ? 1 : 0)) return false;  // (any step flips it)
+    if (!row(label, *v ? "开" : "关", *v != def, desc, true, false, *v ? 1 : 0)) return false;  // (any step flips it)
     *v = !*v;
     return true;
 }
@@ -315,7 +315,7 @@ void opt_end(void) {
                                             ImVec2(fp.x + ImGui::GetContentRegionAvail().x, fp.y - 6 * g_scale),
                                             IM_COL32(238, 198, 92, 36), 1.0f);
         ImGui::TextColored(ImVec4(0.68f, 0.72f, 0.66f, 0.90f),
-                           "Enter / A: Select or toggle    Left / Right: Adjust    Esc / B: Back");
+                           "回车 / A：选择或切换    左右：调整    Esc / B：返回");
     }
     ImGui::SetWindowFontScale(1.0f);
     ImGui::EndChild();

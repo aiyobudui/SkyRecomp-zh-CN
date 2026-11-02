@@ -71,39 +71,35 @@ extern "C" uint32_t rt_treasure_roll(uint64_t ret, uint32_t won) {
 
 // Gameplay tab rows (menu.mm tab_gameplay), each at the game's own value by default.
 extern "C" void difficulty_rows(void) {
-    static const char *const names[] = {"Half", "Default", "2x", "3x", "4x", "5x", "6x", "7x", "8x"};
+    static const char *const names[] = {"一半", "默认", "2x", "3x", "4x", "5x", "6x", "7x", "8x"};
     static const float mult[] = {0.5f, 1, 2, 3, 4, 5, 6, 7, 8};
     int di = 1;  // (the closest step to the setting: older files may hold any multiplier)
     for (int i = 0; i < 9; i++)
         if (fabsf(mult[i] - g_settings.diff_damage) < fabsf(mult[di] - g_settings.diff_damage)) di = i;
-    if (opt_choice("Damage taken", &di, names, 9, 1,
-                   "How much damage enemies deal to Link: half, the game's own, or up to eight times as much. On top "
-                   "of Hero Mode's double damage.")) {
+    if (opt_choice("受到伤害", &di, names, 9, 1,
+                   "敌人对林克造成的伤害：一半、游戏原值，或最多八倍。在此之上还会叠加英雄模式的双倍伤害。")) {
         g_settings.diff_damage = mult[di];
         settings_save();
     }
-    if (opt_toggle("One-hit KO", &g_settings.diff_ohko, false, "Any hit defeats Link, whatever his hearts."))
+    if (opt_toggle("一击必杀", &g_settings.diff_ohko, false, "任何攻击都会击倒林克，无视心数。"))
         settings_save();
 }
 
 extern "C" void loftwing_rows(void) {
-    static const char *const dashes[] = {"3 (Default)", "4", "5", "6", "7"};
+    static const char *const dashes[] = {"3（默认）", "4", "5", "6", "7"};
     int di = rt_dash_max() - 3;
-    if (opt_choice("Dash charges", &di, dashes, 5, 0,
-                   "How many dashes your Loftwing holds; they recharge one at a time as usual.\n\nApplies from the "
-                   "next time you call your Loftwing. The gauge shows the extra wings from the next start of the "
-                   "game.")) {
+    if (opt_choice("冲刺次数", &di, dashes, 5, 0,
+                   "飞鸟一次可用的冲刺次数；仍按原规则逐个回复。\n\n从下次召唤飞鸟起生效，界面上的额外羽翼要等下次启动游戏才会显示。")) {
         g_settings.dash_max = di + 3;
         settings_save();
     }
-    static const char *const names[] = {"0.5x", "0.75x", "Default", "1.25x", "1.5x", "2x"};
+    static const char *const names[] = {"0.5x", "0.75x", "默认", "1.25x", "1.5x", "2x"};
     static const float mult[] = {0.5f, 0.75f, 1, 1.25f, 1.5f, 2};
     int si = 2;
     for (int i = 0; i < 6; i++)
         if (fabsf(mult[i] - g_settings.flight_speed) < fabsf(mult[si] - g_settings.flight_speed)) si = i;
-    if (opt_choice("Flight speed", &si, names, 6, 2,
-                   "How fast your Loftwing flies, dashes included. Turning stays the same, so turns are wider when "
-                   "faster.")) {
+    if (opt_choice("飞行速度", &si, names, 6, 2,
+                   "飞鸟的飞行速度（含冲刺）。转向速度不变，因此速度越快转弯越宽。")) {
         g_settings.flight_speed = mult[si];
         settings_save();
     }
@@ -111,18 +107,17 @@ extern "C" void loftwing_rows(void) {
 
 extern "C" void drop_rows(void) {
     bool c = false;
-    c |= opt_toggle("Hearts", &g_settings.drop_hearts, true, "Defeated enemies, grass and pots can drop recovery hearts.");
-    c |= opt_toggle("Rupees", &g_settings.drop_rupees, true, "Defeated enemies, grass and pots can drop rupees.");
-    c |= opt_toggle("Ammo", &g_settings.drop_ammo, true,
-                    "Defeated enemies, grass and pots can drop arrows, Deku Seeds and bombs (once you have the bag).");
-    c |= opt_toggle("Treasures", &g_settings.drop_treasures, true,
-                    "Defeated enemies can drop monster materials: Chu Jelly, Monster Claws, Ornamental and Golden "
-                    "Skulls, Evil Crystals.");
+    c |= opt_toggle("心", &g_settings.drop_hearts, true, "击败的敌人、割草与罐子可以掉落回复之心。");
+    c |= opt_toggle("卢比", &g_settings.drop_rupees, true, "击败的敌人、割草与罐子可以掉落卢比。");
+    c |= opt_toggle("弹药", &g_settings.drop_ammo, true,
+                    "击败的敌人、割草与罐子可以掉落箭、德库种子与炸弹（需先拿到对应的袋）。");
+    c |= opt_toggle("宝物", &g_settings.drop_treasures, true,
+                    "击败敌人可以掉落怪物素材：丘丘胶、怪物爪、装饰骷髅与黄金骷髅、邪恶结晶。");
     if (c) settings_save();
 }
 
 static void speed_row(const char *label, float *v, const char *desc) {
-    static const char *const names[] = {"0.5x", "0.75x", "Default", "1.25x", "1.5x", "2x"};
+    static const char *const names[] = {"0.5x", "0.75x", "默认", "1.25x", "1.5x", "2x"};
     static const float mult[] = {0.5f, 0.75f, 1, 1.25f, 1.5f, 2};
     int si = 2;
     for (int i = 0; i < 6; i++)
@@ -134,7 +129,6 @@ static void speed_row(const char *label, float *v, const char *desc) {
 }
 
 extern "C" void link_rows(void) {
-    speed_row("Walking & running speed", &g_settings.walk_speed,
-              "How fast Link walks, runs and sprints. His animations keep their pace, so his feet may slide at the "
-              "far ends.");
+    speed_row("行走与奔跑速度", &g_settings.walk_speed,
+              "林克走路、奔跑与冲刺的速度。动作节奏不变，因此在极端值下可能会出现脚步滑动。");
 }

@@ -22,6 +22,21 @@
 extern "C" bool vk_imgui_backend_init(void);  // runtime/nvn/vulkan/imgui_glue.cpp
 #endif
 
+// 简体中文界面：中文字号（Baloo 2 的 39/72 在视觉上约等于下面这些值，可自行微调）
+#ifndef ZH_MENU_PX
+#define ZH_MENU_PX 33
+#endif
+#ifndef ZH_MENU_PX_BIG
+#define ZH_MENU_PX_BIG 61
+#endif
+#ifndef ZH_OVERLAY_PX
+#define ZH_OVERLAY_PX 30
+#endif
+#ifndef ZH_OVERLAY_PX_BIG
+#define ZH_OVERLAY_PX_BIG 48
+#endif
+#include "zh_glyphs.h"  // ZH_UI_GLYPHS：界面里实际用到的汉字
+
 extern "C" {
 #include "../hle.h"
 #include "../settings.h"
@@ -434,9 +449,42 @@ static void init(void) {
     // FPS counter, overlays and on-screen keyboard keep the fonts above
     char baloo[1024];
     if (const char *f = getenv("LARECOMP_MENU_FONT")) strlcpy(baloo, f, sizeof baloo);  // (test) another weight / face
-    if (getenv("LARECOMP_MENU_FONT") || rt_resource("Baloo2-SemiBold.ttf", "fonts/Baloo2-SemiBold.ttf", baloo, sizeof baloo)) {
-        g_menu_font = io.Fonts->AddFontFromFileTTF(baloo, 39, &cfg);
-        g_menu_font_big = io.Fonts->AddFontFromFileTTF(baloo, 72, &cfg);
+    bool have_baloo = getenv("LARECOMP_MENU_FONT") || rt_resource("Baloo2-SemiBold.ttf", "fonts/Baloo2-SemiBold.ttf", baloo, sizeof baloo);
+    // 简体中文界面：Baloo 2 与 Segoe UI 都没有汉字，菜单改用系统中文字体，字形按界面实际用到的字生成
+    const char *zh_fonts[] = {getenv("SKYRECOMP_ZH_FONT") ? getenv("SKYRECOMP_ZH_FONT") : "",
+                              "C:/Windows/Fonts/msyh.ttc", "C:/Windows/Fonts/msyhbd.ttc",
+                              "C:/Windows/Fonts/simhei.ttf", "/System/Library/Fonts/PingFang.ttc",
+                              "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+                              "fonts/NotoSansSC-Regular.ttf", "fonts/msyh.ttc"};
+    const char *zf = NULL;
+    for (const char *p : zh_fonts) {
+        if (!*p) continue;
+        FILE *f = fopen(p, "rb");
+        if (!f) continue;
+        fclose(f);
+        zf = p;
+        break;
+    }
+    static ImVector<ImWchar> zh_ranges;
+    if (zf && zh_ranges.empty()) {
+        ImFontGlyphRangesBuilder b;
+        b.AddRanges(io.Fonts->GetGlyphRangesDefault());
+        b.AddText(ZH_UI_GLYPHS);
+        b.BuildRanges(&zh_ranges);
+        io.Fonts->TexDesiredWidth = 4096;
+    }
+    if (zf) {  // (中文比 Baloo 的视觉字号大，所以标称字号略收一点；覆盖层字体也换掉，免得个别页面缺字)
+        ImFontConfig zc = cfg;
+        g_menu_font = io.Fonts->AddFontFromFileTTF(zf, ZH_MENU_PX, &zc, zh_ranges.Data);
+        g_menu_font_big = io.Fonts->AddFontFromFileTTF(zf, ZH_MENU_PX_BIG, &zc, zh_ranges.Data);
+        g_font = io.Fonts->AddFontFromFileTTF(zf, ZH_OVERLAY_PX, &zc, zh_ranges.Data);
+        ImFontConfig b2 = zc;
+        b2.FontNo = 0;
+        g_font_big = io.Fonts->AddFontFromFileTTF(zf, ZH_OVERLAY_PX_BIG, &b2, zh_ranges.Data);
+    }
+    if (have_baloo && (!g_menu_font || !g_menu_font_big)) {  // (没找到中文字体：沿用 Baloo 2)
+        if (!g_menu_font) g_menu_font = io.Fonts->AddFontFromFileTTF(baloo, 39, &cfg);
+        if (!g_menu_font_big) g_menu_font_big = io.Fonts->AddFontFromFileTTF(baloo, 72, &cfg);
     }
     if (!g_font) g_font = io.Fonts->AddFontDefault();
     if (!g_font_big) g_font_big = g_font;
@@ -511,7 +559,7 @@ static bool choice(const char *label, int *value, const char *const *names, int 
 }
 
 static bool toggle(const char *label, bool *v) {
-    const char *names[] = {"Off", "On"};
+    const char *names[] = {"关", "开"};
     int i = *v;
     bool ch = choice(label, &i, names, 2);
     *v = i;
@@ -537,43 +585,41 @@ extern "C" double output_scale_dynamic_factor(void);
 static void tab_display(void) {
     float scale = ImGui::GetFontSize() / 34;
     opt_begin("##video", scale);
-    opt_section("Display");
-    const char *aspects[] = {"Unlocked", "Original 16:9"};
-    opt_choice("Aspect ratio", &g_settings.aspect, aspects, 2, ASPECT_UNLOCKED,
-               "Unlocked: the view fills the window, so wider (or taller) windows show more of the island - up to "
-               "ultrawide; houses and dungeons keep their framing. Original 16:9: the game's own framing, with bars.");
+    opt_section("显示");
+    const char *aspects[] = {"自由", "原始 16:9"};
+    opt_choice("画面比例", &g_settings.aspect, aspects, 2, ASPECT_UNLOCKED,
+               "自由：画面铺满窗口，窗口越宽（或越高）就能看到越多岛屿，最宽可到超宽屏；房屋与迷宫保持原有构图。原始 16:9：保持游戏本身的构图，四周留黑边。");
     bool fs = g_settings.fullscreen;
-    if (opt_toggle("Fullscreen", &fs, false, "Fills the screen. Also: F11, Alt+Enter or Cmd+Ctrl+F.")) {
+    if (opt_toggle("全屏", &fs, false, "铺满屏幕。也可用 F11、Alt+Enter 或 Cmd+Ctrl+F。")) {
         g_settings.fullscreen = fs;
         g_want_fullscreen_apply.store(true);
     }
-    static const char *const perf_names[] = {"Off", "FPS", "Full"};
-    if (opt_choice("Performance overlay", &g_settings.perf_overlay, perf_names, 3, PERF_OFF,
-                   "Top right. FPS: the frame rate and frame time. Full: also GPU, CPU and RAM load, temperatures, "
-                   "VRAM and a frame time graph, for benchmarking. F10 switches between them while you play."))
+    static const char *const perf_names[] = {"关", "FPS", "完整"};
+    if (opt_choice("性能覆盖层", &g_settings.perf_overlay, perf_names, 3, PERF_OFF,
+                   "显示在右上角。FPS：帧率与帧时间。完整：另外显示 GPU、CPU、内存占用、温度、显存与帧时间曲线，便于跑分。游戏中按 F10 切换。"))
         settings_save();
     if (g_is_skyward) {
-        const char *rates[] = {"60 FPS", "120 FPS (Experimental)"};
+        const char *rates[] = {"60 帧", "120 帧（实验性）"};
         int rate = g_settings.frame_rate == 120;
-        if (opt_choice("Frame rate", &rate, rates, 2, 0,
-                       "Sets the rendering target while preserving game speed. 120 FPS requires faster hardware and a high refresh rate display."))
+        if (opt_choice("帧率", &rate, rates, 2, 0,
+                       "在保持游戏速度不变的前提下设定渲染目标帧率。120 帧需要更强的硬件和支持高刷新率的显示器。"))
             g_settings.frame_rate = rate ? 120 : 60;
     }
 
-    opt_section("Rendering");
+    opt_section("渲染");
 #ifndef __APPLE__
-    opt_toggle("4K Textures", &g_settings.hd_textures, true,
-               "Uses the included high-resolution textures throughout the game. Turn off to use the original textures. Changes apply while playing.");
+    opt_toggle("4K 纹理", &g_settings.hd_textures, true,
+               "全程使用随附的高分辨率纹理。关闭则使用原始纹理。改动立即生效，无需重启。");
 #endif
 #ifdef _WIN32
     if (opt_toggle("ReShade", &g_settings.reshade, true,
-               "Enables the included lighting and colour effects. Off disables the effects while playing and prevents loading ReShade on the next launch. If started with ReShade off, close and reopen the application to enable it."))
+               "启用随附的光影与色彩效果。关闭会在游玩时停用效果，并在下次启动时不再加载 ReShade。若以关闭状态启动后想要启用，请关闭并重新打开程序。"))
         settings_save();
 #endif
     // display order -> RES_* (the ini / enum order predates the menu order)
     // (up to 4x: 7680 x 4320, 8K - more only ran out of GPU memory, and sat next to 75% in the list)
     // (Match display in the middle: left from it 75% / 50% / 25%, right Dynamic then 1x-4x; user 2026-10-11)
-    static const char *res[] = {"25%", "50%", "75%", "Match display", "Dynamic", "1x", "2x", "3x", "4x"};
+    static const char *res[] = {"25%", "50%", "75%", "匹配显示器", "动态", "1x", "2x", "3x", "4x"};
     static const int res_mode[] = {RES_Q25, RES_Q50, RES_Q75, RES_MATCH, RES_DYNAMIC, 1, 2, 3, 4};
     enum { RES_MATCH_AT = 3 };
     enum { NRES = sizeof res_mode / sizeof res_mode[0] };
@@ -583,62 +629,48 @@ static void tab_display(void) {
         float sx, sy;
         renderer_get_scale(&sx, &sy);
         char d[400];
-        int n = snprintf(d, sizeof d, "How sharp the 3D image is. Match display: your screen's own resolution. Dynamic: "
-                                      "as sharp as your GPU keeps at full speed. 1x-4x: the Switch's 1080p times that. "
-                                      "75%% / 50%% / 25%%: a share of the display, for slower machines.\n\nRendering at "
-                                      "%.0f x %.0f.", 1920.0 * sx, 1080.0 * sy);
+        int n = snprintf(d, sizeof d, "3D 画面的清晰程度。匹配显示器：使用屏幕自身分辨率。动态：在不掉帧的前提下尽可能锐利。1x-4x：Switch 的 1080p 乘以该倍数。75%% / 50%% / 25%%：按显示器的比例渲染，适合较慢的机器。\n\n当前渲染分辨率 %.0f x %.0f。", 1920.0 * sx, 1080.0 * sy);
         if (g_settings.res_mode == RES_DYNAMIC)
-            snprintf(d + n, sizeof d - n, " Dynamic: %.0f%% of the display right now.", output_scale_dynamic_factor() * 100);
-        if (opt_choice("Internal resolution", &ri, res, NRES, RES_MATCH_AT, d, false)) g_settings.res_mode = res_mode[ri];
+            snprintf(d + n, sizeof d - n, " 动态：当前为显示器的 %.0f%%。", output_scale_dynamic_factor() * 100);
+        if (opt_choice("内部渲染分辨率", &ri, res, NRES, RES_MATCH_AT, d, false)) g_settings.res_mode = res_mode[ri];
     }
     {   // each OS's own upscaler next to bilinear (UPSCALE_SHARP: MetalFX on macOS, AMD FSR 1 on Windows)
 #ifdef __APPLE__
-        static const char *ups[] = {"Bilinear", "MetalFX"};
-        const char *ud = "How the image is scaled up to the window when it renders at a lower resolution. MetalFX: Apple's "
-                         "upscaler, sharper. Bilinear: plain and soft.";
+        static const char *ups[] = {"双线性", "MetalFX"};
+        const char *ud = "画面以较低分辨率渲染时，如何放大到窗口尺寸。MetalFX：Apple 的放大技术，更锐利。双线性：简单柔和。";
         int ui = g_settings.upscaler == UPSCALE_BILINEAR ? 0 : 1;
 #else
-        static const char *ups[] = {"Bilinear", "AMD FSR 1", "NVIDIA NIS"};
-        const char *ud = "How the image is scaled up to the window when it renders at a lower resolution. AMD FSR 1: "
-                         "AMD FidelityFX edge-aware upscaling and sharpening. NVIDIA NIS: NVIDIA Image Scaling with "
-                         "directional 6-tap filtering and adaptive sharpening. Bilinear: plain and soft.";
+        static const char *ups[] = {"双线性", "AMD FSR 1", "NVIDIA NIS"};
+        const char *ud = "画面以较低分辨率渲染时，如何放大到窗口尺寸。AMD FSR 1：AMD FidelityFX 的边缘感知放大与锐化。NVIDIA NIS：NVIDIA Image Scaling，带方向性 6 抽头滤波与自适应锐化。双线性：简单柔和。";
         int ui = g_settings.upscaler == UPSCALE_BILINEAR ? 0 : g_settings.upscaler == UPSCALE_NIS ? 2 : 1;
 #endif
         char udm[512];
         if (g_settings.res_mode == RES_MATCH) {  // (renders at the window's size: nothing to scale up)
-            snprintf(udm, sizeof udm, "%s\n\nNot used at Match display: the game already renders at your display's resolution.", ud);
+            snprintf(udm, sizeof udm, "%s\n\n在「匹配显示器」下不使用此项：游戏本身就按显示器分辨率渲染。", ud);
             ud = udm;
             opt_disable_next();
         }
 #ifdef __APPLE__
-        if (opt_choice("Upscaler", &ui, ups, 2, 1, ud)) g_settings.upscaler = ui ? UPSCALE_SHARP : UPSCALE_BILINEAR;
+        if (opt_choice("放大方式", &ui, ups, 2, 1, ud)) g_settings.upscaler = ui ? UPSCALE_SHARP : UPSCALE_BILINEAR;
 #else
-        if (opt_choice("Upscaler", &ui, ups, 3, 1, ud)) g_settings.upscaler = ui == 2 ? UPSCALE_NIS : ui == 1 ? UPSCALE_FSR1 : UPSCALE_BILINEAR;
+        if (opt_choice("放大方式", &ui, ups, 3, 1, ud)) g_settings.upscaler = ui == 2 ? UPSCALE_NIS : ui == 1 ? UPSCALE_FSR1 : UPSCALE_BILINEAR;
 #endif
     }
-    static const char *aa[] = {"Off", "SMAA", "FXAA"};  // AA_* order
-    opt_choice("Anti-aliasing", &g_settings.antialias, aa, 3, AA_OFF,
-               "Smooths jagged edges of the game image before it is scaled to the window. SMAA: finds the edges and "
-               "blends only along them, so textures stay sharp. FXAA: smooths more edges, including thin and curved "
-               "ones, but softens the whole image a little. Both are most useful at a lower internal resolution; for "
-               "the cleanest image, raise Internal resolution above your display's (supersampling).");
+    static const char *aa[] = {"关", "SMAA", "FXAA"};  // AA_* order
+    opt_choice("抗锯齿", &g_settings.antialias, aa, 3, AA_OFF,
+               "在画面放大到窗口之前，先平滑游戏图像边缘的锯齿。SMAA：只沿检测到的边缘混合，纹理保持锐利。FXAA：能平滑更多边缘（含细线与曲线），但整体会略微变软。两者在较低的内部渲染分辨率下最有用；想要最干净的画面，请把内部渲染分辨率调到高于显示器分辨率（超采样）。");
     {
-        static const char *af[] = {"Game", "2x", "4x", "8x", "16x"};
+        static const char *af[] = {"游戏", "2x", "4x", "8x", "16x"};
         static const int af_level[] = {0, 2, 4, 8, 16};
         int ai = 0;
         for (int i = 0; i < 5; i++) if (af_level[i] == g_settings.aniso) ai = i;
-        if (opt_choice("Anisotropic filtering", &ai, af, 5, 0,
-                       "Keeps textures sharp when seen at a shallow angle - paths, floors and walls stretching into the "
-                       "distance - instead of blurring them. Game: the level the game asks for. 16x: sharpest; costs "
-                       "little on most GPUs."))
+        if (opt_choice("各向异性过滤", &ai, af, 5, 0,
+                       "让以很小夹角看到的纹理（伸向远处的小路、地面与墙面）保持清晰，而不是糊成一片。游戏：使用游戏请求的等级。16x：最锐利，在多数显卡上开销很小。"))
             g_settings.aniso = af_level[ai];
     }
-    static const char *shc[] = {"Hybrid", "Wait", "Async"};  // SHADERS_* order
-    opt_choice("Shader compilation (Experimental)", &g_settings.shader_compile, shc, 3, SHADERS_HYBRID,
-               "What happens the first time something needs a new shader. Hybrid: what's drawn every frame appears "
-               "a moment later instead of the game pausing, while shadows and other reused images still wait, so they "
-               "are never wrong. Wait: everything waits, which can stutter. Async: nothing waits, so a shadow can be "
-               "missing until it's redrawn.");
+    static const char *shc[] = {"混合", "等待", "异步"};  // SHADERS_* order
+    opt_choice("着色器编译（实验性）", &g_settings.shader_compile, shc, 3, SHADERS_HYBRID,
+               "第一次需要新着色器时如何处理。混合：每帧都要绘制的画面稍后出现，而不是卡住游戏；阴影等会被复用的图像仍然等待，因此不会出错。等待：全部等待，可能出现卡顿。异步：都不等待，阴影在重绘前可能缺失。");
     opt_end();
 }
 
@@ -651,51 +683,47 @@ static void amiibo_rows(void) {
     pthread_mutex_unlock(&amiibo_lock);
     bool have = amiibo_loaded();
     char d[400];
-    snprintf(d, sizeof d, "In Fi's menu, \"Use amiibo\" recognises your Zelda & Loftwing amiibo right away: from the surface "
-             "Fi takes you to the sky, and from the sky back to the spot you left. Needs your own figure's dump, loaded "
-             "below.%s%s", amiibo_msg[0] ? "\n\n" : "", amiibo_msg);
+    snprintf(d, sizeof d, "在法伊菜单中，「使用 amiibo」会立刻识别你的塞尔达与飞鸟 amiibo：在地面时法伊会送你上天，在天上时则送回你离开的位置。需要你自己手办的转储文件，请在下方载入。%s%s", amiibo_msg[0] ? "\n\n" : "", amiibo_msg);
     if (!have) opt_disable_next();
-    opt_toggle("Zelda & Loftwing amiibo", &g_settings.amiibo, true, d);
-    snprintf(d, sizeof d, "Pick a dump of your own Zelda & Loftwing amiibo (a .bin made with an NFC phone app such as "
-             "TagMo). A copy is kept in the game's data folder; only the figure's ID is read from it.%s%s",
+    opt_toggle("塞尔达与飞鸟 amiibo", &g_settings.amiibo, true, d);
+    snprintf(d, sizeof d, "选择你自己塞尔达与飞鸟 amiibo 的转储文件（用 TagMo 等手机 NFC 应用生成的 .bin）。副本会保存在游戏数据目录中，程序只从中读取手办 ID。%s%s",
              amiibo_msg[0] ? "\n\n" : "", amiibo_msg);
-    if (opt_button(have ? "Load another amiibo dump" : "Load amiibo dump", d)) g_amiibo_dialog = true;
+    if (opt_button(have ? "载入其他 amiibo 转储" : "载入 amiibo 转储", d)) g_amiibo_dialog = true;
 }
 
 
 // Gameplay: the game's text language, difficulty, accessibility and the Zelda & Loftwing amiibo
 static void tab_gameplay(void) {
     opt_begin("##gameplay", ImGui::GetFontSize() / 34);
-    opt_section("Game");
+    opt_section("游戏");
     const char *names[N_LANGUAGES];
     for (int i = 0; i < N_LANGUAGES; i++) names[i] = g_language_names[i];
     int lang = g_settings.language;
-    if (opt_choice("Language", &lang, names, N_LANGUAGES, LANG_AUTO,
-                   "The game's text language. Changing language requires restarting the game to reload text archives.")) {
+    if (opt_choice("语言", &lang, names, N_LANGUAGES, LANG_AUTO,
+                   "游戏的文本语言。更改语言需要重启游戏以重新载入文本包。")) {
         g_settings.language = lang;
         settings_save();
     }
     if (settings_language_pending()) {
-        if (opt_button("Restart to apply language",
-                       "Restarts the game immediately to reload text in the chosen language. Progress since your last save will be lost.")) {
+        if (opt_button("重启以应用语言",
+                       "立即重启游戏，按所选语言重新加载文本。上次存档之后的进度会丢失。")) {
             settings_save();
             rt_request_reboot(RT_REBOOT_GAME);
             set_open(false);
         }
     }
-    opt_section("Difficulty");
+    opt_section("难度");
     difficulty_rows();
-    opt_section("Link");
+    opt_section("林克");
     link_rows();
-    opt_section("Loftwing");
+    opt_section("飞鸟");
     loftwing_rows();
-    opt_section("Drops");
+    opt_section("掉落");
     drop_rows();
-    opt_section("Accessibility");
-    static const char *const cb[] = {"Off", "Red-weak (protan)", "Green-weak (deutan)", "Blue-weak (tritan)"};
-    opt_choice("Color blind mode", &g_settings.colorblind, cb, 4, COLORBLIND_OFF,
-               "Shifts the colors you can't tell apart into ones you can (daltonization), for each common kind of "
-               "color blindness. Applies to the whole game picture.");
+    opt_section("辅助功能");
+    static const char *const cb[] = {"关", "红色弱（protan）", "绿色弱（deutan）", "蓝色弱（tritan）"};
+    opt_choice("色盲模式", &g_settings.colorblind, cb, 4, COLORBLIND_OFF,
+               "针对常见的各类色觉异常，把你难以区分的颜色偏移成能够区分的颜色（色觉矫正）。作用于整个游戏画面。");
     opt_section("amiibo");
     amiibo_rows();
     opt_end();
@@ -704,12 +732,12 @@ static void tab_gameplay(void) {
 // Cosmetics: tunic / heart colours, live (runtime/nvn/texpatch.c); never part of a seed
 __attribute__((unused)) static void tab_cosmetics(void) {
     opt_begin("##cosmetics", ImGui::GetFontSize() / 34);
-    opt_section("Colors");
-    opt_choice("Tunic color", &g_settings.tunic, g_tunic_colours, N_TUNIC_COLOURS, 0,
-               "Link's tunic color. Default: the game's own (or the randomizer seed's).");
-    opt_choice("Heart color", &g_settings.hearts, g_heart_colours, N_HEART_COLOURS, 0,
-               "The color of the hearts on the HUD.");
-    if (opt_action("Random colors", "", "Picks a random tunic and heart color (any other color, Default included).")) {
+    opt_section("颜色");
+    opt_choice("服装颜色", &g_settings.tunic, g_tunic_colours, N_TUNIC_COLOURS, 0,
+               "林克衣服的颜色。默认：游戏本来的颜色（随机化模式下则取该种子的设定）。");
+    opt_choice("心的颜色", &g_settings.hearts, g_heart_colours, N_HEART_COLOURS, 0,
+               "界面心数图标的颜色。");
+    if (opt_action("随机配色", "", "随机挑选服装颜色与心的颜色（「默认」之外的任意颜色）。")) {
         g_settings.tunic = (g_settings.tunic + 1 + rand() % (N_TUNIC_COLOURS - 1)) % N_TUNIC_COLOURS;
         g_settings.hearts = (g_settings.hearts + 1 + rand() % (N_HEART_COLOURS - 1)) % N_HEART_COLOURS;
     }
@@ -718,15 +746,15 @@ __attribute__((unused)) static void tab_cosmetics(void) {
 
 static void tab_audio(void) {
     opt_begin("##audio", ImGui::GetFontSize() / 34);
-    opt_section("Sound");
+    opt_section("声音");
     float pct = roundf(g_settings.volume * 100);
-    if (opt_slider("Volume", &pct, 0, 200, 5, 100, "%g%%",
-                   "The game's volume. 100% is the game's own level; above it, louder."))
+    if (opt_slider("音量", &pct, 0, 200, 5, 100, "%g%%",
+                   "游戏音量。100% 为游戏原始音量，高于此值会更响。"))
         g_settings.volume = pct / 100.0f;
-    opt_toggle("Room reverb", &g_settings.reverb, true,
-               "The game's echo in caves, dungeons and big rooms.");
-    opt_toggle("Movie audio", &g_settings.movie_audio, true,
-               "Sound in the game's movies (the opening and the ending). Applies the next time a movie starts.");
+    opt_toggle("房间混响", &g_settings.reverb, true,
+               "游戏在洞穴、迷宫与大房间中的回响。");
+    opt_toggle("影片音频", &g_settings.movie_audio, true,
+               "游戏影片（片头与结局）的声音。下次影片播放时生效。");
     opt_end();
 }
 
@@ -739,16 +767,16 @@ static void tab_quit(float scale, bool in_game) {
         ask = 0;
     const char *lost = in_game ? "\n\nProgress since your last save is lost." : "";
     char d1[200], d2[200];
-    snprintf(d1, sizeof d1, "Leaves the game and goes back to the Sky Recomp start screen.%s", lost);
-    snprintf(d2, sizeof d2, "Closes Sky Recomp.%s", lost);
+    snprintf(d1, sizeof d1, "离开游戏并回到 Sky Recomp 启动界面。%s", lost);
+    snprintf(d2, sizeof d2, "关闭 Sky Recomp。%s", lost);
     opt_begin("##quit", scale);
-    opt_section("Quit");
+    opt_section("退出");
     if (!ask) {
         if (!in_game) opt_disable_next();  // (already on it)
-        if (opt_action("Quit to Start Screen", "", in_game ? d1 : "You're on the start screen.")) ask = 1;
-        if (opt_action("Quit to Desktop", "", d2)) ask = 2;
+        if (opt_action("退回启动界面", "", in_game ? d1 : "你当前已在启动界面。")) ask = 1;
+        if (opt_action("退出到桌面", "", d2)) ask = 2;
     } else {
-        if (opt_action(ask == 1 ? "Yes, quit to Start Screen" : "Yes, quit to Desktop", "", ask == 1 ? d1 : d2)) {
+        if (opt_action(ask == 1 ? "是，退回启动界面" : "是，退出到桌面", "", ask == 1 ? d1 : d2)) {
             settings_save();
             if (ask == 1) {
                 rt_request_reboot(2);
@@ -760,55 +788,47 @@ static void tab_quit(float scale, bool in_game) {
             }
             ask = 0;
         }
-        if (opt_action("Cancel", "", "Stays where you are.")) ask = 0;
+        if (opt_action("取消", "", "保持当前状态。")) ask = 0;
     }
     opt_end();
 }
 
 static void tab_about(void) {
-    header("Movement");
-    toggle("D-pad moves Link", &g_settings.dpad_move);
-    toggle("Free camera look", &g_settings.free_cam);
-    hint("Moving the right stick looks around without having to hold L first. A short L press switches it off/on "
-         "for this session; holding L while the eye is on turns the free camera off for the hold, so the right "
-         "stick swings the sword. The eye at the bottom right shows the state. Targeting (ZL), items (ZR) and "
-         "the pouch (R) keep their normal right-stick behavior.");
+    header("移动");
+    toggle("用十字键移动林克", &g_settings.dpad_move);
+    toggle("自由视角", &g_settings.free_cam);
+    hint("无需先按住 L，推右摇杆即可环视。短按 L 可在本次会话中开/关；按住 L 时右下角眼睛图标亮起，表示按住期间关闭自由视角，此时右摇杆恢复挥剑。右下角的眼睛图标显示当前状态。锁定（ZL）、道具（ZR）与布袋（R）仍保持右摇杆原有行为。");
     if (g_settings.free_cam) {
-        slider("Free camera sensitivity", &g_settings.free_cam_sens, 0.25f, 2.0f, "%.2fx");
-        hint("How fast the right stick turns the camera while free camera look is active (1.00x = the game's speed).");
-        toggle("Mouse camera and combat", &g_settings.mouse_controls);
+        slider("自由视角灵敏度", &g_settings.free_cam_sens, 0.25f, 2.0f, "%.2fx");
+        hint("自由视角开启时右摇杆转动镜头的速度（1.00x = 游戏原速）。");
+        toggle("鼠标视角与战斗", &g_settings.mouse_controls);
         if (g_settings.mouse_controls) {
-            slider("Mouse sensitivity", &g_settings.mouse_sens, 0.25f, 4.0f, "%.2fx");
-            hint("Move the mouse to look around. Left click: sword slash (move before clicking to choose direction). "
-                 "Right click: target / shield bash. Middle click: sword thrust. Hold Left Alt or Mouse 4 for item aim: "
-                 "left click readies / uses the selected item; hold and release to fire the bow. "
-                 "Hold 3: item wheel. Mouse 5 or E: pouch. "
-                 "K still interacts. Esc releases the mouse. Explicit mouse button bindings take priority.");
+            slider("鼠标灵敏度", &g_settings.mouse_sens, 0.25f, 4.0f, "%.2fx");
+            hint("移动鼠标即可环视。左键：挥剑（点击前先移动可决定方向）。右键：锁定 / 盾击。中键：突刺。按住左 Alt 或鼠标 4 号键进入道具瞄准：左键准备 / 使用所选道具；按住再松开可射箭。按住 3：道具轮盘。鼠标 5 号键或 E：布袋。K 仍可交互。Esc 释放鼠标。显式绑定的鼠标按键优先。");
         }
     }
-    slider("Gyro sensitivity", &g_settings.gyro_sens, 0.1f, 2.0f, "%.2fx");
-    hint("How far the aim moves when you turn a controller with a gyro (bow, slingshot, first-person view). "
-         "1.00x = the controller's own motion; lower it if the aim is too twitchy.");
+    slider("陀螺仪灵敏度", &g_settings.gyro_sens, 0.1f, 2.0f, "%.2fx");
+    hint("转动带陀螺仪的手柄时准星移动的幅度（弓、弹弓、第一人称视角）。1.00x = 手柄本身的动作幅度；若准星太飘可以调低。");
     ImGui::Spacing();
-    header("Button prompts");
+    header("按键提示");
     {
         static const char *const fam[] = {"Nintendo", "Xbox", "PlayStation"};
         char autol[64];
-        snprintf(autol, sizeof autol, "Auto (%s)", input_pad_connected() ? fam[input_pad_family() % 3] : "Keyboard");
-        const char *names[] = {autol, "Nintendo", "Xbox", "PlayStation", "Keyboard"};
-        choice("Button icons", &g_settings.prompts, names, 5);
-        static const char *const looks[] = {"Light (the game's own)", "Dark"};
-        choice("Button look", &g_settings.prompt_look, looks, 2);
+        snprintf(autol, sizeof autol, "自动（%s）", input_pad_connected() ? fam[input_pad_family() % 3] : "键盘");
+        const char *names[] = {autol, "Nintendo", "Xbox", "PlayStation", "键盘"};
+        choice("按键图标", &g_settings.prompts, names, 5);
+        static const char *const looks[] = {"浅色（同游戏本体）", "深色"};
+        choice("按键外观", &g_settings.prompt_look, looks, 2);
     }
-    hint("Xbox, PlayStation and keyboard icons: light buttons like the game's own, or dark ones.");
+    hint("Xbox、PlayStation 与键盘图标：使用和游戏本体一致的浅色按键，或使用深色按键。");
     ImGui::Spacing();
-    header("Controls");
+    header("按键设置");
     controls_bindings_draw(ImGui::GetFontSize() / 34);
     ImGui::Spacing();
-    header("Menu");
-    ImGui::TextUnformatted("Open / close this menu:  F1, Esc, the controller's Home / Xbox / PlayStation button, or Back + Start");
-    ImGui::TextUnformatted("Switch tabs:  L / R  (Q / E)        Back:  B  (Esc)");
-    ImGui::TextUnformatted("Fullscreen:  F11 / Alt+Enter");
+    header("菜单");
+    ImGui::TextUnformatted("打开/关闭本菜单：F1、Esc、手柄的 Home / Xbox / PlayStation 键，或 Back + Start");
+    ImGui::TextUnformatted("切换标签：L / R（Q / E）        返回：B（Esc）");
+    ImGui::TextUnformatted("全屏：F11 / Alt+Enter");
 }
 
 extern "C" bool inventory_overlay_wanted(void);
@@ -836,7 +856,7 @@ static void keyboard_draw(ImGuiIO &io, float scale) {
     ImGui::Begin("##kbd", NULL, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
                                     ImGuiWindowFlags_AlwaysAutoResize);
     ImGui::PushFont(g_font_big);
-    ImGui::TextColored(ImVec4(0.93f, 0.76f, 0.33f, 1), "Enter your name");
+    ImGui::TextColored(ImVec4(0.93f, 0.76f, 0.33f, 1), "输入名称");
     ImGui::PopFont();
     static bool was_open, was_pad;
     bool pad = g_last_pad.load(), appearing = !was_open || pad != was_pad;  // (switching device: focus the new one)
@@ -850,7 +870,7 @@ static void keyboard_draw(ImGuiIO &io, float scale) {
                          [](ImGuiInputTextCallbackData *d) -> int { return d->EventChar < 0x20 ? 1 : 0; });
         ImGui::PopFont();
         if ((int)strlen(g_kbd_text) > g_kbd_max) g_kbd_text[g_kbd_max] = 0;
-        ImGui::TextDisabled("Enter  confirm      Esc  cancel      (%d / %d)", (int)strlen(g_kbd_text), g_kbd_max);
+        ImGui::TextDisabled("回车 确认      Esc 取消      (%d / %d)", (int)strlen(g_kbd_text), g_kbd_max);
     } else {  // controller: on-screen keyboard (osk.mm, shared with our menus' text fields)
         int r = osk_keys(g_kbd_text, sizeof g_kbd_text, g_kbd_max, appearing, scale, g_font_big);
         if (r) g_kbd = r > 0 ? 2 : 3;  // (Start / + confirms in menu_handle_event too)
@@ -892,9 +912,9 @@ static void tabs_body(float scale, bool in_game, void (*prelaunch)(float)) {
     struct Tab { const char *name; int id; bool on; };
     Tab tabs[12];
     int ntabs = 0;
-    if (prelaunch) tabs[ntabs++] = {"Prelaunch", -1, true};
-    static const char *names[] = {"Video", "Audio", "Save Editor", "Randomizer", "Warp", "Cheats", "Gameplay",
-                                  "Cosmetics", "Controls", "Quit", "Mods"};
+    if (prelaunch) tabs[ntabs++] = {"启动前", -1, true};
+    static const char *names[] = {"画面", "音频", "存档编辑", "随机化", "传送", "作弊", "玩法",
+                                  "外观", "按键设置", "退出", "Mod"};
     static const int order[] = {8, 0, 1, 6, 5, 9};  // Controls, Video, Audio, Gameplay, Cheats, Quit (Mods: hidden for now)
     for (int i : order)  // (Quit: in game only - the start screen has its own QUIT)
         if (i != 9 || !prelaunch) tabs[ntabs++] = {names[i], i, true};
@@ -1097,7 +1117,7 @@ void menu_render(void *cmd, uint32_t target_w, uint32_t target_h) {
         // header as on the start screen's Settings: the title, and a close X in the corner (B / Esc too). ("Title
         // screen" - rt_request_reboot(RT_REBOOT_TITLE) - is to find a new home; user 2026-10-11.)
         ImGui::PushFont(g_font_big);
-        ImGui::TextColored(ImVec4(0.93f, 0.76f, 0.33f, 1), "Settings");
+        ImGui::TextColored(ImVec4(0.93f, 0.76f, 0.33f, 1), "设置");
         ImGui::PopFont();
         {
             float bx = 44 * scale;

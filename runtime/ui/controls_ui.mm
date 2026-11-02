@@ -15,7 +15,7 @@ extern "C" {
 static void cell(int dev, int slot, int fam, int cap_dev, int cap_slot, int ms_left) {
     char lbl[96];
     bool waiting = cap_dev == dev && cap_slot == slot;
-    if (waiting) snprintf(lbl, sizeof lbl, "Press %s...  %d##%d_%d", dev == BIND_DEV_PAD ? "a button" : "a key",
+    if (waiting) snprintf(lbl, sizeof lbl, "按下 %s...  %d##%d_%d", dev == BIND_DEV_PAD ? "按键" : "按键",
                           (ms_left + 999) / 1000, dev, slot);
     else snprintf(lbl, sizeof lbl, "%s##%d_%d", dev == BIND_DEV_PAD ? bind_pad_label(g_bind_pad[slot], fam) :
                                                  bind_key_label(g_bind_key[slot]), dev, slot);
@@ -43,13 +43,12 @@ extern "C" void controls_bindings_draw(float scale) {
     SDL_JoystickID *ids = SDL_GetGamepads(&n);
     const char *pad_name = ids && n > 0 ? SDL_GetGamepadNameForID(ids[0]) : NULL;
     char line[200];
-    if (n > 0) snprintf(line, sizeof line, "Controller: %s  (%s button names)", pad_name ? pad_name : "connected", fam_name[fam % 3]);
-    else snprintf(line, sizeof line, "No controller connected  (%s button names shown)", fam_name[fam % 3]);
+    if (n > 0) snprintf(line, sizeof line, "手柄：%s（%s 按键名）", pad_name ? pad_name : "已连接", fam_name[fam % 3]);
+    else snprintf(line, sizeof line, "未连接手柄（当前显示 %s 按键名）", fam_name[fam % 3]);
     SDL_free(ids);
     ImGui::TextUnformatted(line);
     ImGui::PushTextWrapPos(0);
-    ImGui::TextDisabled("Select a binding, then press the new button or key. Esc (or 5 seconds) cancels. A button "
-                        "that's already in use swaps with the old one.");
+    ImGui::TextDisabled("先选中一项，再按下新的按键。Esc（或等待 5 秒）取消。若该按键已被占用，会与原按键互换。");
     ImGui::PopTextWrapPos();
 
     int cd, cs, ms;
@@ -63,21 +62,21 @@ extern "C" void controls_bindings_draw(float scale) {
     if (serial != seen_serial) {
         seen_serial = serial;
         const char *now = rslot < 0 ? "" : rdev == BIND_DEV_PAD ? bind_pad_label(g_bind_pad[rslot], fam) : bind_key_label(g_bind_key[rslot]);
-        if (kind == 5) snprintf(msg, sizeof msg, "%s bindings reset to the defaults.", rdev == BIND_DEV_PAD ? "Controller" : "Keyboard");
-        else if (kind == 1) snprintf(msg, sizeof msg, "%s is now %s.", bind_input_name(rslot), now);
+        if (kind == 5) snprintf(msg, sizeof msg, "%s 的按键已恢复默认。", rdev == BIND_DEV_PAD ? "手柄" : "键盘");
+        else if (kind == 1) snprintf(msg, sizeof msg, "%s 已设为 %s。", bind_input_name(rslot), now);
         else if (kind == 2)
-            snprintf(msg, sizeof msg, "%s is now %s; %s moved to %s (swapped).", bind_input_name(rslot), now,
+            snprintf(msg, sizeof msg, "%s 已设为 %s；%s 移到了 %s（已互换）。", bind_input_name(rslot), now,
                      bind_input_name(rother), rdev == BIND_DEV_PAD ? bind_pad_label(g_bind_pad[rother], fam) : bind_key_label(g_bind_key[rother]));
-        else if (kind == 3) snprintf(msg, sizeof msg, "Cancelled: %s unchanged.", bind_input_name(rslot));
-        else if (kind == 4) snprintf(msg, sizeof msg, "Nothing pressed: %s unchanged.", bind_input_name(rslot));
+        else if (kind == 3) snprintf(msg, sizeof msg, "已取消：%s 未更改。", bind_input_name(rslot));
+        else if (kind == 4) snprintf(msg, sizeof msg, "没有检测到按键：%s 未更改。", bind_input_name(rslot));
         if (kind == 1 || kind == 2 || kind == 5) settings_save();
     }
     if (msg[0]) ImGui::TextColored(ImVec4(0.93f, 0.76f, 0.33f, 1), "%s", msg);
 
     if (ImGui::BeginTable("##binds", 3, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_PadOuterX)) {
-        ImGui::TableSetupColumn("Switch", ImGuiTableColumnFlags_WidthStretch, 1.0f);
-        ImGui::TableSetupColumn("Controller", ImGuiTableColumnFlags_WidthStretch, 1.3f);
-        ImGui::TableSetupColumn("Keyboard", ImGuiTableColumnFlags_WidthStretch, 1.3f);
+        ImGui::TableSetupColumn("切换", ImGuiTableColumnFlags_WidthStretch, 1.0f);
+        ImGui::TableSetupColumn("手柄", ImGuiTableColumnFlags_WidthStretch, 1.3f);
+        ImGui::TableSetupColumn("键盘", ImGuiTableColumnFlags_WidthStretch, 1.3f);
         ImGui::TableHeadersRow();
         // in the order a player thinks of them: face buttons, shoulders, Plus / Minus, d-pad, sticks
         static const int order[] = {BIND_A, BIND_B, BIND_X, BIND_Y, BIND_L, BIND_R, BIND_ZL, BIND_ZR, BIND_PLUS,
@@ -91,7 +90,7 @@ extern "C" void controls_bindings_draw(float scale) {
             ImGui::TextUnformatted(bind_input_name(slot));
             ImGui::TableNextColumn();
             if (slot < BIND_PAD_COUNT) cell(BIND_DEV_PAD, slot, fam, cd, cs, ms);
-            else ImGui::TextDisabled(slot < BIND_RS_UP ? "Left stick" : "Right stick");
+            else ImGui::TextDisabled(slot < BIND_RS_UP ? "左摇杆" : "右摇杆");
             ImGui::TableNextColumn();
             cell(BIND_DEV_KEY, slot, fam, cd, cs, ms);
         }
@@ -99,16 +98,13 @@ extern "C" void controls_bindings_draw(float scale) {
     }
     ImGui::Spacing();
     ImGui::BeginDisabled(bind_is_default(BIND_DEV_PAD));
-    if (ImGui::Button("Reset controller to defaults")) { bind_capture_cancel(); bind_reset(BIND_DEV_PAD); }
+    if (ImGui::Button("手柄恢复默认")) { bind_capture_cancel(); bind_reset(BIND_DEV_PAD); }
     ImGui::EndDisabled();
     ImGui::SameLine();
     ImGui::BeginDisabled(bind_is_default(BIND_DEV_KEY));
-    if (ImGui::Button("Reset keyboard to defaults")) { bind_capture_cancel(); bind_reset(BIND_DEV_KEY); }
+    if (ImGui::Button("键盘恢复默认")) { bind_capture_cancel(); bind_reset(BIND_DEV_KEY); }
     ImGui::EndDisabled();
     ImGui::PushTextWrapPos(0);
-    ImGui::TextDisabled("Bindings apply to the game only. Menus keep the fixed layout (right face button / Enter "
-                        "select, bottom face button / Esc back), and the in-game menu always opens with F1 or Esc, or "
-                        "the controller's Back + Start held together, or its Home / Guide button - so this page can't be "
-                        "locked out. The game's button icons follow the controller bindings.");
+    ImGui::TextDisabled("按键绑定只作用于游戏本体。菜单保持固定布局（右侧功能键 / 回车确认，下方功能键 / Esc 返回），游戏内菜单始终可以用 F1 或 Esc、手柄的 Back + Start 同时按、或 Home / Guide 键打开，因此本页不会把自己锁死。游戏内的按键图标会跟随手柄绑定。");
     ImGui::PopTextWrapPos();
 }

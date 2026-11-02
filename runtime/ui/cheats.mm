@@ -61,28 +61,25 @@ extern "C" void cheats_frame(void) {
 
 extern "C" void cheats_draw(float scale) {
     opt_begin("##cheats", scale);
-    opt_section("Always on");
-    if (opt_toggle("Infinite health", &g_settings.cheat_hearts, false,
-                   "Health refills to full whenever Link is hurt.\n\nA single hit bigger than all his hearts still "
-                   "defeats him."))
+    opt_section("始终开启");
+    if (opt_toggle("无限生命", &g_settings.cheat_hearts, false,
+                   "林克受伤后生命会立即回满。\n\n但单次伤害超过其全部心数时仍会被击倒。"))
         settings_save();
-    if (opt_toggle("Infinite stamina", &g_settings.cheat_stamina, false,
-                   "The stamina gauge never drains: sprint, climb and spin as long as you like."))
+    if (opt_toggle("无限耐力", &g_settings.cheat_stamina, false,
+                   "耐力槽永不消耗：可以随意冲刺、攀爬与旋转。"))
         settings_save();
-    if (opt_toggle("Infinite rupees", &g_settings.cheat_rupees, false, "Rupees stay at 9,900.")) settings_save();
-    if (opt_toggle("Infinite Beetle flight", &g_settings.cheat_beetle, false,
-                   "The Beetle keeps flying until you call it back."))
+    if (opt_toggle("无限卢比", &g_settings.cheat_rupees, false, "卢比数量保持在 9,900。")) settings_save();
+    if (opt_toggle("甲虫无限飞行", &g_settings.cheat_beetle, false,
+                   "甲虫会一直飞行，直到你把它召回。"))
         settings_save();
-    if (opt_toggle("Skyward Strike always charged", &g_settings.cheat_skyward, false,
-                   "Link's sword is always charged: every vertical swing sends a Skyward Strike, with no need to "
-                   "hold it up."))
+    if (opt_toggle("天空斩始终蓄力", &g_settings.cheat_skyward, false,
+                   "林克的剑始终保持蓄力：每次竖挥都会放出天空斩，不必先把剑举起。"))
         settings_save();
-    if (opt_toggle("Infinite air dash", &g_settings.cheat_dash, false,
-                   "Your Loftwing's dashes are never used up: dash as often as you like."))
+    if (opt_toggle("无限空中冲刺", &g_settings.cheat_dash, false,
+                   "飞鸟的冲刺次数永不耗尽：想冲几次就冲几次。"))
         settings_save();
-    if (opt_toggle("Enemies always drop items", &g_settings.drop_always, false,
-                   "Defeated enemies, grass and pots always drop something from what they can drop, and enemies "
-                   "always drop their monster materials. Drops turned off in the Gameplay tab stay off."))
+    if (opt_toggle("敌人必定掉落物品", &g_settings.drop_always, false,
+                   "击败的敌人、割草与打碎的罐子必定从可掉落物中给出东西，敌人也必定掉落怪物素材。在「玩法」页里关掉的掉落仍然保持关闭。"))
         settings_save();
     opt_end();
 }

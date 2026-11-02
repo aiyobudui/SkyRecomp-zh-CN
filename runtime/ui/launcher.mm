@@ -32,6 +32,15 @@
 #endif
 #include "imgui_impl_sdl3.h"
 
+// 简体中文界面：中文字号（可按需微调；30/52 大致对应 Baloo 2 放大后的视觉大小）
+#ifndef ZH_PX_SMALL
+#define ZH_PX_SMALL 30
+#endif
+#ifndef ZH_PX_MENU
+#define ZH_PX_MENU 52
+#endif
+#include "zh_glyphs.h"  // ZH_UI_GLYPHS：界面里实际用到的汉字
+
 extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
@@ -224,20 +233,20 @@ static bool file_exists(const std::string &p) {
 // The copied game files alone ("" = there), without the game code built from them
 static std::string check_copied_files(const std::string &root) {
     FILE *f = fopen((root + "/exefs/main").c_str(), "rb");
-    if (!f) return "No game files";
+    if (!f) return "未找到游戏文件";
     uint8_t id[8] = {0};
     fseek(f, 0x40, SEEK_SET);
     size_t n = fread(id, 1, 8, f);
     fclose(f);
-    if (n != 8 || memcmp(id, BUILD_ID, 8)) return "Wrong game version (needs v1.0.0)";
-    if (!file_exists(root + "/romfs.bin") && !file_exists(root + "/romfs/region_common") && !file_exists(root + "/romfs/Object")) return "Game data missing";
+    if (n != 8 || memcmp(id, BUILD_ID, 8)) return "游戏版本不正确（需要 v1.0.0）";
+    if (!file_exists(root + "/romfs.bin") && !file_exists(root + "/romfs/region_common") && !file_exists(root + "/romfs/Object")) return "游戏数据缺失";
     return "";
 }
 
 // "" = ready to play, else what is wrong
 static std::string check_game_files(const std::string &root) {
     std::string why = check_copied_files(root);
-    if (why.empty() && !gamelib_present(root.c_str())) return "Game code not built yet";
+    if (why.empty() && !gamelib_present(root.c_str())) return "游戏代码尚未构建";
     return why;
 }
 
@@ -263,20 +272,20 @@ enum { FAIL_NOT_FOUND = 1, FAIL_UNUSABLE, FAIL_COPY, FAIL_VERSION, FAIL_MISSING,
 static void set_failure(int k) {
     static const char *const head[] = {
         "",
-        "No game files found in that folder",
-        "Packaged or archived files cannot be used directly",
-        "Setup could not finish copying files",
-        "Unsupported game version",
-        "Game files are incomplete",
-        "The game code could not be built"};
+        "该文件夹中没有游戏文件",
+        "不能直接使用打包或压缩格式的文件",
+        "初始化未能完成文件复制",
+        "不支持的游戏版本",
+        "游戏文件不完整",
+        "游戏代码构建失败"};
     static const char *const hint[] = {
         "",
-        "Select the folder that contains your unpacked game files and assets.",
-        "Unpack your game files into a regular folder first, then select that folder.",
-        "Check that your drive has at least 8 GB of free space and try again.",
-        "Sky Recomp requires the base 1.0.0 version of the game without update patches.",
-        "Some required program or asset files are missing. Verify your source folder and try again.",
-        "Make sure the skygen and zig folders are next to skyrecomp.exe, then try again."};
+        "请选择包含已解包游戏文件与资源的文件夹。",
+        "请先把游戏文件解包到普通文件夹，再选择该文件夹。",
+        "请确认磁盘至少有 8 GB 可用空间后重试。",
+        "Sky Recomp 需要游戏本体 1.0.0 版本，且不含更新补丁。",
+        "缺少必要的程序或资源文件，请检查源文件夹后重试。",
+        "请确认 skygen 与 zig 文件夹和 skyrecomp.exe 位于同一目录，然后重试。"};
     if (k >= 1 && k <= 6) set_job(head[k], true, hint[k]);
 }
 
@@ -362,7 +371,7 @@ static void *extract_thread(void *) {
 
     // 1. If game files are already present and valid, launch directly
     if (check_game_files(g_root).empty()) {
-        set_job("Game files ready.");
+        set_job("游戏文件已就绪。");
         g_play_requested = true;
         goto done;
     }
@@ -375,7 +384,7 @@ static void *extract_thread(void *) {
             if (!build_game_code()) goto done;
             goto check;
         }
-        set_job("Scanning folder for game files...");
+        set_job("正在扫描游戏文件...");
         find_game(src, 0, exefs, romfs, unusable);
 
         if (exefs.empty() && file_exists(src + "/main")) exefs = src;
@@ -404,7 +413,7 @@ static void *extract_thread(void *) {
 
         {
             mkdir(g_root.c_str(), 0755);
-            set_job("Copying executable modules...");
+            set_job("正在复制可执行模块...");
             mkdir((g_root + "/exefs").c_str(), 0755);
             if (!romfs_copy_tree(exefs.c_str(), (g_root + "/exefs").c_str(), NULL)) {
                 set_failure(FAIL_COPY);
@@ -413,7 +422,7 @@ static void *extract_thread(void *) {
 
             // (never a romfs.bin onto itself: opening it to write empties it before it is read, #81)
             if (file_exists(romfs) && !is_dir(romfs) && !rt_same_path(romfs.c_str(), (g_root + "/romfs.bin").c_str())) {
-                set_job("Copying game data archive...");
+                set_job("正在复制游戏数据归档...");
                 FILE *in = fopen(romfs.c_str(), "rb");
                 FILE *out = fopen((g_root + "/romfs.bin").c_str(), "wb");
                 if (in && out) {
@@ -425,7 +434,7 @@ static void *extract_thread(void *) {
                 if (out) fclose(out);
             } else if (file_exists(romfs + "/romfs.bin")) {
                 if (rt_same_path((romfs + "/romfs.bin").c_str(), (g_root + "/romfs.bin").c_str())) goto copied;
-                set_job("Copying game data archive...");
+                set_job("正在复制游戏数据归档...");
                 FILE *in = fopen((romfs + "/romfs.bin").c_str(), "rb");
                 FILE *out = fopen((g_root + "/romfs.bin").c_str(), "wb");
                 if (in && out) {
@@ -438,13 +447,13 @@ static void *extract_thread(void *) {
             } else if (romfs != g_root && is_dir(romfs)) {
                 unsigned long long rbytes = romfs_dir_bytes(romfs.c_str());
                 g_total = 2 * rbytes;
-                set_job("Copying game assets...");
+                set_job("正在复制游戏资源...");
                 if (!romfs_copy_tree(romfs.c_str(), (g_root + "/romfs").c_str(), setup_progress)) {
                     set_failure(FAIL_COPY);
                     goto done;
                 }
                 g_phase_base = rbytes, g_done = rbytes;
-                set_job("Building game data image...");
+                set_job("正在生成游戏数据镜像...");
                 char why[256] = "";
                 if (!romfs_build((g_root + "/romfs").c_str(), (g_root + "/romfs.bin").c_str(), setup_progress, why, sizeof why)) {
                     set_failure(FAIL_COPY);
@@ -456,7 +465,7 @@ static void *extract_thread(void *) {
             if (!build_game_code()) goto done;
         }
     } else {
-        set_job("Select your game files folder first.", true, "Choose 'Game files folder' above to pick the folder with your game files.");
+        set_job("请先选择游戏文件文件夹。", true, "点击上方的「游戏文件文件夹」选择包含游戏文件的目录。");
         goto done;
     }
 
@@ -464,7 +473,7 @@ check:
     {
         std::string why = check_game_files(g_root);
         if (why.empty()) {
-            set_job("Game files ready.");
+            set_job("游戏文件已就绪。");
             g_done = 100;
             g_play_requested = true;
         } else {
@@ -488,7 +497,7 @@ static void start_extract(void) {
     if (!error) error = pthread_create(&t, &a, extract_thread, NULL);
     pthread_attr_destroy(&a);
     if (error) {
-        set_job("Setup could not start.", true, "Close other running applications and try again.");
+        set_job("初始化无法启动。", true, "请关闭其他正在运行的程序后重试。");
         pthread_mutex_lock(&g_lock);
         g_busy = false;
         pthread_mutex_unlock(&g_lock);
@@ -514,7 +523,7 @@ static bool build_choice_shown(void) {
     return v;
 #endif
 }
-static const char *const BUILD_NAMES[] = {"Faster build", "Faster game"};
+static const char *const BUILD_NAMES[] = {"优先构建速度", "优先游戏性能"};
 static const char *const BUILD_DESC =
     "How the game code is compiled from your game files. Both optimize everything and take a few minutes.\n\nFaster "
     "build: a file still compiling after 5 minutes (a very slow machine) is restarted without optimization.\n\nFaster "
@@ -524,8 +533,8 @@ static const char *const BUILD_DESC =
 static void SDLCALL picked(void *, const char *const *files, int) {
     if (!files) {  // (the dialog itself failed: no xdg-desktop-portal / zenity, e.g. Batocera - #87)
         fprintf(stderr, "[launcher] folder dialog: %s\n", SDL_GetError());
-        set_job("This system has no folder dialog.", true,
-                "Start Sky Recomp with SKYRECOMP_GAME_FILES=<your game files folder> set, then choose Start.");
+        set_job("当前系统没有文件夹选择对话框。", true,
+                "请先设置 SKYRECOMP_GAME_FILES=<游戏文件文件夹> 再启动 Sky Recomp，然后点「开始」。");
         return;
     }
     if (!files[0]) return;
@@ -581,14 +590,14 @@ static void import_fonts() {
         if (in) fclose(in);
         if (out) fclose(out);
     }
-    g_font_msg = std::to_string(ok) + " font file(s) imported" + (skipped ? ", " + std::to_string(skipped) + " skipped" : "") +
-                 ". Changes take effect next time you start the game.";
+    g_font_msg = std::to_string(ok) + " 个字体文件已导入" + (skipped ? ", " + std::to_string(skipped) + " 个已跳过" : "") +
+                 "。下次启动游戏后生效。";
 }
 
 static void remove_fonts() {
     for (auto n : FONT_STD) unlink((std::string("fonts/") + n).c_str());
     for (auto n : FONT_EXT) unlink((std::string("fonts/") + n).c_str());
-    g_font_msg = "Imported fonts removed. The built-in fallback font will be used.";
+    g_font_msg = "已移除导入的字体，将使用内置后备字体。";
 }
 
 // ------------------------------------------------------------------ background: a title movie frame
@@ -711,20 +720,20 @@ static bool aspect_prompt(float s) {
         ImVec2 wp = ImGui::GetWindowPos(), ws = ImGui::GetWindowSize();
         draw_tablet_frame(ImGui::GetWindowDrawList(), wp, ImVec2(wp.x + ws.x, wp.y + ws.y), s, 16.0f, IM_COL32(0, 0, 0, 0));
         ImGui::PushFont(g_font_menu);
-        ImGui::TextColored(ImVec4(0.95f, 0.80f, 0.38f, 1.0f), "Choose your display mode");
+        ImGui::TextColored(ImVec4(0.95f, 0.80f, 0.38f, 1.0f), "选择显示模式");
         ImGui::PopFont();
         ImGui::SetWindowFontScale(1.18f);
         ImGui::PushTextWrapPos(0);
-        ImGui::TextUnformatted("Select how the game camera fits your screen. You can change this at any time in Settings > Video.");
+        ImGui::TextUnformatted("选择游戏画面如何适配屏幕。之后可随时在「设置 > 画面」中更改。");
         ImGui::PopTextWrapPos();
         ImGui::Dummy(ImVec2(0, 16 * s));
         float bw = 310 * s, gap = 20 * s;
         ImGui::SetCursorPosX((ImGui::GetWindowWidth() - 2 * bw - gap) * 0.5f);
         int pick = -1;
         ImGui::SetItemDefaultFocus();
-        if (ImGui::Button("Original 16:9", ImVec2(bw, 48 * s))) pick = ASPECT_ORIGINAL;
+        if (ImGui::Button("原始 16:9", ImVec2(bw, 48 * s))) pick = ASPECT_ORIGINAL;
         ImGui::SameLine(0, gap);
-        if (ImGui::Button("Unlocked (fill window)", ImVec2(bw, 48 * s))) pick = ASPECT_UNLOCKED;
+        if (ImGui::Button("自由拉伸（铺满窗口）", ImVec2(bw, 48 * s))) pick = ASPECT_UNLOCKED;
         ImGui::SetWindowFontScale(1.0f);
         if (pick >= 0) {
             g_settings.aspect = pick;
@@ -753,22 +762,22 @@ static bool menu_tip(float s) {
     if (open) {
         ImVec2 wp = ImGui::GetWindowPos(), ws = ImGui::GetWindowSize();
         draw_tablet_frame(ImGui::GetWindowDrawList(), wp, ImVec2(wp.x + ws.x, wp.y + ws.y), s, 16.0f, IM_COL32(0, 0, 0, 0));
-        static const char *const home[] = {"Home button", "Xbox button", "PlayStation button"};
+        static const char *const home[] = {"Home 键", "Xbox 键", "PlayStation 键"};
         static const char *const pad[] = {"Minus + Plus", "View + Menu", "Create + Options"};
         ImGui::PushFont(g_font_menu);
-        ImGui::TextColored(ImVec4(0.95f, 0.80f, 0.38f, 1.0f), "Opening the in-game menu");
+        ImGui::TextColored(ImVec4(0.95f, 0.80f, 0.38f, 1.0f), "打开游戏内菜单");
         ImGui::PopFont();
         ImGui::SetWindowFontScale(1.18f);
         ImGui::PushTextWrapPos(0);
-        ImGui::TextUnformatted("Access controls, video, audio, and mods at any time while playing.");
+        ImGui::TextUnformatted("游戏中可随时调整按键、画面、音频与 Mod。");
         ImGui::Spacing();
         int fam = bind_label_family() % 3;
-        ImGui::Text("Press F1 or Esc on a keyboard, or press the %s (or %s together) on your controller.", home[fam], pad[fam]);
+        ImGui::Text("键盘按 F1 或 Esc；手柄按 %s（或同时按 %s）。", home[fam], pad[fam]);
         ImGui::PopTextWrapPos();
         ImGui::Dummy(ImVec2(0, 16 * s));
         ImGui::SetCursorPosX((ImGui::GetWindowWidth() - 220 * s) * 0.5f);
         ImGui::SetItemDefaultFocus();
-        if (ImGui::Button("Start game", ImVec2(220 * s, 48 * s)) || ImGui::IsKeyPressed(ImGuiKey_Enter) ||
+        if (ImGui::Button("开始游戏", ImVec2(220 * s, 48 * s)) || ImGui::IsKeyPressed(ImGuiKey_Enter) ||
             ImGui::IsKeyPressed(ImGuiKey_GamepadFaceDown)) {
             g_settings.menu_tip_seen = true;
             settings_save();
@@ -1050,49 +1059,49 @@ static void prelaunch_tab(float sc) {
         ImGui::Separator();
         ImGui::Spacing();
     };
-    heading("Game files");
+    heading("游戏文件");
     static double gb = -1;
     if (gb < 0) gb = rt_game_files_size(g_root.c_str()) / 1e9;
     ImGui::TextColored(ImVec4(0.84f, 0.86f, 0.80f, 1.0f),
-                       "Extracted game data and compiled library currently use %.1f GB.", gb > 0 ? gb : 0.0);
+                       "已解包的游戏数据与编译库当前占用 %.1f GB。", gb > 0 ? gb : 0.0);
     ImGui::Spacing();
 #ifdef _WIN32
-    if (ImGui::Button("Show in Explorer")) reveal_folder(g_root);
+    if (ImGui::Button("在资源管理器中显示")) reveal_folder(g_root);
 #elif defined(__linux__)
-    if (ImGui::Button("Open folder")) reveal_folder(g_root);
+    if (ImGui::Button("打开文件夹")) reveal_folder(g_root);
 #else
-    if (ImGui::Button("Show in Finder")) reveal_folder(g_root);
+    if (ImGui::Button("在访达中显示")) reveal_folder(g_root);
 #endif
     ImGui::SameLine();
     static bool shot_del = getenv("LARECOMP_LAUNCHER_SHOT") && strstr(getenv("LARECOMP_LAUNCHER_SHOT"), ":askdelete");
-    if (ImGui::Button("Delete game files") || shot_del) ImGui::OpenPopup("##delfiles"), shot_del = false;  // (test: :askdelete)
+    if (ImGui::Button("删除游戏文件") || shot_del) ImGui::OpenPopup("##delfiles"), shot_del = false;  // (test: :askdelete)
     if (ImGui::BeginPopupModal("##delfiles", NULL, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoTitleBar)) {
         ImVec2 wp = ImGui::GetWindowPos(), ws = ImGui::GetWindowSize();
         draw_tablet_frame(ImGui::GetWindowDrawList(), wp, ImVec2(wp.x + ws.x, wp.y + ws.y), sc, 12.0f, IM_COL32(0, 0, 0, 0));
         ImGui::PushFont(g_font_menu);
-        ImGui::TextColored(ImVec4(0.96f, 0.45f, 0.38f, 1), "Delete installed game files?");
+        ImGui::TextColored(ImVec4(0.96f, 0.45f, 0.38f, 1), "删除已安装的游戏文件？");
         ImGui::PopFont();
-        ImGui::Text("This removes Sky Recomp's copy of the game files (%.1f GB).", gb);
-        ImGui::TextDisabled("Your save files, settings, and original source folder are kept.");
+        ImGui::Text("这会删除 Sky Recomp 复制的游戏文件（%.1f GB）。", gb);
+        ImGui::TextDisabled("你的存档、设置和原始源文件夹都会保留。");
         if (rt_dev_mode()) {  // (a source checkout: the files are the project's own extracted/)
             bool abs = !g_root.empty() && (g_root[0] == '/' || (g_root.size() > 1 && g_root[1] == ':'));
             std::string where = abs ? g_root : std::string(rt_data_root()) + "/" + g_root;
-            ImGui::TextColored(ImVec4(1, 0.5f, 0.4f, 1), "Dev checkout: %s", where.c_str());
+            ImGui::TextColored(ImVec4(1, 0.5f, 0.4f, 1), "开发版目录：%s", where.c_str());
         }
         ImGui::Spacing();
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.48f, 0.16f, 0.14f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.64f, 0.22f, 0.18f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.74f, 0.26f, 0.22f, 1.0f));
-        if (ImGui::Button("Delete game files", ImVec2(230 * sc, 0))) {
+        if (ImGui::Button("删除游戏文件", ImVec2(230 * sc, 0))) {
             bool ok = rt_remove_game_files(g_root.c_str());  // (runtime/paths.c: only what the extraction made)
-            set_job(ok ? "Game files deleted." : "Could not delete the game files (outside Sky Recomp's data folder).", !ok);
+            set_job(ok ? "游戏文件已删除。" : "Could not delete the game files (outside Sky Recomp's data folder).", !ok);
             g_files_deleted = true, gb = -1;
             ImGui::CloseCurrentPopup();
         }
         ImGui::PopStyleColor(3);
         ImGui::SameLine();
         ImGui::SetItemDefaultFocus();
-        if (ImGui::Button("Keep files", ImVec2(210 * sc, 0)) || ImGui::IsKeyPressed(ImGuiKey_GamepadFaceRight, false) ||
+        if (ImGui::Button("保留文件", ImVec2(210 * sc, 0)) || ImGui::IsKeyPressed(ImGuiKey_GamepadFaceRight, false) ||
             ImGui::IsKeyPressed(ImGuiKey_Escape, false))
             ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
@@ -1100,11 +1109,11 @@ static void prelaunch_tab(float sc) {
     if (build_choice_shown()) {  // (the choice applies to the next build: Rebuild makes one now)
         ImGui::Spacing();
         ImGui::Spacing();
-        heading("Game code");
+        heading("游戏代码");
         ImGui::SetNextItemWidth(260 * sc);
         if (ImGui::Combo("##gamebuild", &g_settings.game_build, BUILD_NAMES, 2)) settings_save();
         ImGui::SameLine();
-        if (ImGui::Button("Rebuild game code")) {  // (deleted first: the start screen then builds it, as Set up does)
+        if (ImGui::Button("重新构建游戏代码")) {  // (deleted first: the start screen then builds it, as Set up does)
             rt_remove_game_file(g_root.c_str(), GAMELIB_NAME);
             rt_remove_game_file(g_root.c_str(), GAMELIB_NAME ".id");
             g_files_deleted = true;
@@ -1112,31 +1121,30 @@ static void prelaunch_tab(float sc) {
         }
         ImGui::PushTextWrapPos(0);
         ImGui::TextDisabled("%s", BUILD_DESC);
-        ImGui::TextDisabled("Rebuild compiles it again from the copied game files, the way chosen here.");
+        ImGui::TextDisabled("重新构建会按这里选定的方式，从已复制的游戏文件重新编译。");
         ImGui::PopTextWrapPos();
     }
     ImGui::Spacing();
     ImGui::Spacing();
-    heading("System fonts");
+    heading("系统字体");
     import_fonts();
     bool fs = have_font(FONT_STD, 4), fe = have_font(FONT_EXT, 2);
-    ImGui::Text("Dialogue font: %s    Controller glyphs: %s",
-                fs ? "Custom (imported)" : "Built-in fallback",
-                fe ? "Imported" : "Built-in fallback");
+    ImGui::Text("对话字体：%s    手柄图标：%s",
+                fs ? "自定义（已导入）" : "内置后备",
+                fe ? "已导入" : "内置后备");
     ImGui::PushTextWrapPos(0);
-    ImGui::TextDisabled("Custom system fonts are optional. You can import compatible .bfttf or .ttf font files "
-                        "for dialogue and controller glyphs, or use the built-in fallback typeface.");
+    ImGui::TextDisabled("自定义系统字体是可选项。你可以导入兼容的 .bfttf 或 .ttf 字体文件，用于对话与手柄图标，也可以直接使用内置后备字体。");
     ImGui::PopTextWrapPos();
     if (!g_font_msg.empty()) ImGui::TextColored(ImVec4(0.45f, 0.92f, 0.65f, 1.0f), "%s", g_font_msg.c_str());
     static const SDL_DialogFileFilter font_f[] = {{"Font files", "bfttf;ttf"}};
-    if (ImGui::Button("Import font files")) SDL_ShowOpenFileDialog(picked_fonts, NULL, g_launcher_win, font_f, 1, NULL, true);
+    if (ImGui::Button("导入字体文件")) SDL_ShowOpenFileDialog(picked_fonts, NULL, g_launcher_win, font_f, 1, NULL, true);
     if (fs || fe) {
         ImGui::SameLine();
-        if (ImGui::Button("Restore fallback font")) remove_fonts();
+        if (ImGui::Button("恢复后备字体")) remove_fonts();
     }
     ImGui::Spacing();
     ImGui::Spacing();
-    heading("Game language");
+    heading("游戏语言");
     const char *names[N_LANGUAGES];
     for (int i = 0; i < N_LANGUAGES; i++) names[i] = g_language_names[i];
     int lang = g_settings.language;
@@ -1146,7 +1154,7 @@ static void prelaunch_tab(float sc) {
         settings_save();
     }
     ImGui::PushTextWrapPos(0);
-    ImGui::TextDisabled("Selects the in-game text language. Changes take effect when the game boots.");
+    ImGui::TextDisabled("选择游戏内文本语言。改动会在游戏下次启动时生效。");
     ImGui::PopTextWrapPos();
 }
 
@@ -1186,13 +1194,41 @@ extern "C" void launcher_run(const char *root) {
                            own.c_str(), "fonts/nintendo_udsgr_std_003.ttf", "/System/Library/Fonts/Avenir Next.ttc",
                            "/System/Library/Fonts/Helvetica.ttc", "C:/Windows/Fonts/segoeui.ttf"};
     static const ImWchar ranges[] = {0x20, 0xFF, 0x2039, 0x203A, 0x2192, 0x2192, 0x2713, 0x2713, 0x25B8, 0x25B8, 0};  // + ‹ › → ✓ ▸
-    for (const char *p : fonts) {
-        if (g_font_menu || !*p || !file_exists(p)) continue;
+    // 简体中文界面：Baloo 2 只有拉丁字形，正文改用系统中文字体，字形范围按界面实际用到的字生成
+    const char *zh_fonts[] = {getenv("SKYRECOMP_ZH_FONT") ? getenv("SKYRECOMP_ZH_FONT") : "",
+                              "C:/Windows/Fonts/msyh.ttc", "C:/Windows/Fonts/msyhbd.ttc",
+                              "C:/Windows/Fonts/simhei.ttf", "/System/Library/Fonts/PingFang.ttc",
+                              "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+                              "fonts/NotoSansSC-Regular.ttf", "fonts/msyh.ttc"};
+    const char *zf = NULL;
+    for (const char *p : zh_fonts) if (*p && file_exists(p)) { zf = p; break; }
+    static ImVector<ImWchar> zh_ranges;
+    if (zf && zh_ranges.empty()) {
+        ImFontGlyphRangesBuilder b;
+        b.AddRanges(io.Fonts->GetGlyphRangesDefault());
+        b.AddRanges(ranges);
+        b.AddText(ZH_UI_GLYPHS);
+        b.BuildRanges(&zh_ranges);
+    }
+    if (zf) {
+        io.Fonts->TexDesiredWidth = 4096;  // (汉字字形多，图集要给足宽度)
+        g_font_small = io.Fonts->AddFontFromFileTTF(zf, ZH_PX_SMALL, NULL, zh_ranges.Data);
+        g_font_menu = io.Fonts->AddFontFromFileTTF(zf, ZH_PX_MENU, NULL, zh_ranges.Data);
+    }
+    for (const char *p : fonts) {  // (标题是英文 logo，仍用 Baloo 2)
+        if (g_font_title || !*p || !file_exists(p)) continue;
         bool b2 = p == own.c_str() || getenv("LARECOMP_LAUNCHER_FONT");
-        g_font_small = io.Fonts->AddFontFromFileTTF(p, 30 * (b2 ? 1.75f : 1), NULL, ranges);
-        g_font_menu = io.Fonts->AddFontFromFileTTF(p, 52 * (b2 ? 1.85f : 1), NULL, ranges);
         g_font_title = io.Fonts->AddFontFromFileTTF(p, 92 * (b2 ? 2.3f : 1), NULL, ranges);
     }
+    if (!g_font_menu) {  // (没找到中文字体：退回原来的英文方案)
+        for (const char *p : fonts) {
+            if (g_font_menu || !*p || !file_exists(p)) continue;
+            bool b2 = p == own.c_str() || getenv("LARECOMP_LAUNCHER_FONT");
+            g_font_small = io.Fonts->AddFontFromFileTTF(p, 30 * (b2 ? 1.75f : 1), NULL, ranges);
+            g_font_menu = io.Fonts->AddFontFromFileTTF(p, 52 * (b2 ? 1.85f : 1), NULL, ranges);
+        }
+    }
+    if (!g_font_title) g_font_title = g_font_menu;
     if (!g_font_menu) g_font_small = g_font_menu = g_font_title = io.Fonts->AddFontDefault();
     ImGuiStyle &st = ImGui::GetStyle();
     st.Colors[ImGuiCol_Header] = ImVec4(0, 0, 0, 0);
@@ -1425,10 +1461,10 @@ extern "C" void launcher_run(const char *root) {
                 static bool focused_once;
                 if (!focused_once) { ImGui::SetKeyboardFocusHere(); focused_once = true; }
                 ImVec2 play_at = ImGui::GetCursorScreenPos();
-                bool pressed = menu_item("PLAY", true, &hov);
+                bool pressed = menu_item("开始游戏", true, &hov);
                 if (status.empty()) {  // PLAY twinkles now and then while the game is ready
                     ImGui::PushFont(g_font_menu);
-                    float w = ImGui::CalcTextSize("PLAY").x, h = ImGui::CalcTextSize("PLAY").y;
+                    float w = ImGui::CalcTextSize("开始游戏").x, h = ImGui::CalcTextSize("开始游戏").y;
                     ImGui::PopFont();
                     float t = (float)ImGui::GetTime(), ph = fmodf(t, 3.6f), ph2 = fmodf(t + 0.45f, 3.6f);
                     float k1 = ph < 0.9f ? sinf(ph / 0.9f * 3.14159265f) : 0, k2 = ph2 < 0.7f ? sinf(ph2 / 0.7f * 3.14159265f) : 0;
@@ -1451,7 +1487,7 @@ extern "C" void launcher_run(const char *root) {
                 if (menu_tip(s)) play = true;
                 ImGui::SetCursorPosX(x0);
                 if (g_refocus == SETTINGS) ImGui::SetKeyboardFocusHere(), g_refocus = MAIN;
-                if (menu_item("SETTINGS", true)) {
+                if (menu_item("设置", true)) {
                     static bool opened;
                     menu_tabs_focus(!opened);
                     opened = true;
@@ -1460,10 +1496,10 @@ extern "C" void launcher_run(const char *root) {
                 if (!status.empty() || busy) {
                     ImGui::SetCursorPosX(x0);
                     if (g_refocus == SETUP) ImGui::SetKeyboardFocusHere(), g_refocus = MAIN;
-                    if (menu_item("SET UP GAME FILES", !busy)) page = SETUP;
+                    if (menu_item("初始化游戏文件", !busy)) page = SETUP;
                 }
                 ImGui::SetCursorPosX(x0);
-                if (menu_item("QUIT", true)) exit(0);
+                if (menu_item("退出", true)) exit(0);
                 g_menu_gap = 0.35f;
             } else if (page == SETTINGS) {
                 float sc = ds.y / 1080.0f, w = fminf(ds.x * 0.92f, 1520 * sc), h = ds.y - 2 * 22 * sc;
@@ -1482,7 +1518,7 @@ extern "C" void launcher_run(const char *root) {
                 ImGui::PopStyleColor();
                 ImGui::PushFont(g_font_small);
                 ImGui::PushFont(g_font_menu);
-                ImGui::TextColored(ImVec4(0.95f, 0.80f, 0.38f, 1), "Settings");
+                ImGui::TextColored(ImVec4(0.95f, 0.80f, 0.38f, 1), "设置");
                 ImGui::PopFont();
                 bool back;
                 {  // close: a drawn X in the corner (B / Esc too)
@@ -1542,7 +1578,7 @@ extern "C" void launcher_run(const char *root) {
                 ImGui::PopStyleColor();
                 ImGui::PushFont(g_font_small);
                 ImGui::PushFont(g_font_menu);
-                ImGui::TextColored(ImVec4(0.95f, 0.80f, 0.38f, 1), "Game Files Setup");
+                ImGui::TextColored(ImVec4(0.95f, 0.80f, 0.38f, 1), "游戏文件初始化");
                 ImGui::PopFont();
                 bool back = false;
                 if (!busy) {
@@ -1571,9 +1607,9 @@ extern "C" void launcher_run(const char *root) {
                 pthread_mutex_unlock(&g_lock);
                 bool ready = status.empty() && !busy;
                 static double files_gb = -1;
-                std::string src_v = src.empty() ? "Choose folder..." : "Selected";
+                std::string src_v = src.empty() ? "选择文件夹..." : "已选择";
                 auto check_left_of_value = [&](const std::string &v) {
-                    if (v != "Selected") return;
+                    if (v != "已选择") return;
                     ImVec2 rb = ImGui::GetItemRectMax(), ra = ImGui::GetItemRectMin();
                     float fs = ImGui::GetFontSize(), vw = ImGui::CalcTextSize(v.c_str()).x;
                     float x = rb.x - 18 * sc - vw - fs * 0.95f, cy = (ra.y + rb.y) * 0.5f, u = fs * 0.62f;
@@ -1583,13 +1619,11 @@ extern "C" void launcher_run(const char *root) {
                     dl->AddLine(ImVec2(x + u * 0.35f, cy + u * 0.35f), ImVec2(x + u, cy - u * 0.4f), g, fs * 0.11f);
                 };
 
-                std::string src_d = "Select the folder containing your unpacked game files (base version 1.0.0). "
-                                    "Sky Recomp does not include any game assets or copyrighted data.";
+                std::string src_d = "选择包含已解包游戏文件的文件夹（本体 1.0.0 版本）。Sky Recomp 不包含任何游戏资源或受版权保护的数据。";
                 if (!src.empty()) src_d += "\n\nSelected folder:\n" + src;
 
                 const std::string &job_line = job;
-                std::string ex_d = "Copies the required files, builds the local data archive, and compiles the game code into "
-                                   "a native library for your PC. This runs once during initial setup and leaves your source folder untouched.";
+                std::string ex_d = "复制所需文件、生成本地数据归档，并把游戏代码编译成适用于你这台电脑的原生库。此步骤仅在首次初始化时执行一次，且不会改动你的源文件夹。";
                 if (!job.empty()) ex_d += "\n\n" + job + (job_hint.empty() ? "" : "\n" + job_hint);
 
                 static int seen_frame = -10, focus_first;
@@ -1600,25 +1634,25 @@ extern "C" void launcher_run(const char *root) {
                 };
                 opt_begin("##files", sc);
                 if (!ready) {
-                    opt_section("1. Source Files");
+                    opt_section("1. 源文件");
                     if (busy) opt_disable_next();
-                    if (opt_action("Game files folder", src_v.c_str(), src_d.c_str(), true))
+                    if (opt_action("游戏文件文件夹", src_v.c_str(), src_d.c_str(), true))
                         SDL_ShowOpenFolderDialog(picked, NULL, win, NULL, false);
                     check_left_of_value(src_v);
                     first_row();
 
-                    opt_section("2. Install & Compile");
+                    opt_section("2. 安装与编译");
                     if (build_choice_shown()) {
                         if (busy) opt_disable_next();
-                        if (opt_choice("Game code", &g_settings.game_build, BUILD_NAMES, 2, GAME_BUILD_FAST, BUILD_DESC))
+                        if (opt_choice("游戏代码", &g_settings.game_build, BUILD_NAMES, 2, GAME_BUILD_FAST, BUILD_DESC))
                             settings_save();
                     }
                     if (busy || (src.empty() && !check_copied_files(g_root).empty())) opt_disable_next();
-                    if (opt_action("Set up game files", busy ? "Working..." : "Start", ex_d.c_str(), true)) start_setup();
+                    if (opt_action("初始化游戏文件", busy ? "处理中..." : "开始", ex_d.c_str(), true)) start_setup();
                     files_gb = -1;
                 } else {
-                    opt_section("Ready to Play");
-                    if (opt_action("Start Game", "Launch", "Launch the game now.", true)) {
+                    opt_section("可以开始游戏");
+                    if (opt_action("启动游戏", "启动", "立即启动游戏。", true)) {
                         play = true;
                     }
                     first_row();
@@ -1626,21 +1660,20 @@ extern "C" void launcher_run(const char *root) {
                     if (files_gb < 0) files_gb = rt_game_files_size(g_root.c_str()) / 1e9;
                     char gb[32];
                     snprintf(gb, sizeof gb, "%.1f GB", files_gb);
-                    opt_section("Manage Game Files");
+                    opt_section("管理游戏文件");
                     if (!g_confirm_delete) {
-                        if (opt_action("Delete game files", gb, "Removes Sky Recomp's installed game data and compiled library to free disk space. "
-                                       "Your save data, settings, and original source folder are kept.", true))
+                        if (opt_action("删除游戏文件", gb, "删除 Sky Recomp 已安装的游戏数据和编译库以释放磁盘空间。你的存档、设置与原始源文件夹都会保留。", true))
                             g_confirm_delete = true;
                     } else {
-                        if (opt_action("Delete game files now", gb, "Permanently deletes the installed game files from Sky Recomp's folder.", true)) {
+                        if (opt_action("立即删除游戏文件", gb, "从 Sky Recomp 目录中永久删除已安装的游戏文件。", true)) {
                             bool ok = rt_remove_game_files(g_root.c_str());
                             status = check_game_files(g_root);
-                            if (ok) set_job("Game files deleted.");
-                            else set_job("Could not delete the game files", true, "They are outside Sky Recomp's data folder, so nothing was removed.");
+                            if (ok) set_job("游戏文件已删除。");
+                            else set_job("无法删除游戏文件", true, "它们不在 Sky Recomp 的数据目录内，因此没有删除任何内容。");
                             if (!status.empty()) g_bg = 0;
                             g_confirm_delete = false, files_gb = -1;
                         }
-                        if (opt_action("Keep game files", "", "Cancels deletion and keeps your installed game files.", true)) g_confirm_delete = false;
+                        if (opt_action("保留游戏文件", "", "取消删除，保留已安装的游戏文件。", true)) g_confirm_delete = false;
                     }
                 }
                 if (!job_line.empty()) {
@@ -1688,8 +1721,8 @@ extern "C" void launcher_run(const char *root) {
                     fg->AddRectFilled(o, ImVec2(o.x + ds.x, o.y + ds.y), IM_COL32(4, 10, 14, 185));
                     float f = test_busy ? 0.42f : extract_progress();
                     bool recompiling = g_build_frac >= 0;
-                    const char *title = recompiling ? "Recompiling game code" : "Setting up game files";
-                    static const char *const notes[] = {"This runs once during initial setup and takes a couple of minutes."};
+                    const char *title = recompiling ? "正在重编译游戏代码" : "正在初始化游戏文件";
+                    static const char *const notes[] = {"仅在首次初始化时执行一次，大约需要几分钟。"};
                     int nnotes = recompiling ? 1 : 0;
                     float tfs = g_font_menu->FontSize * 0.75f, sfs = g_font_small->FontSize * 0.85f;
                     ImVec2 ts = g_font_menu->CalcTextSizeA(tfs, FLT_MAX, 0, title);
@@ -1711,7 +1744,7 @@ extern "C" void launcher_run(const char *root) {
                         draw_diamond(fg, ImVec2(fill_x, (ba.y + bb.y) * 0.5f), 5.5f * sc, 5.5f * sc, kColGoldBright);
                     }
                     char line[200];
-                    snprintf(line, sizeof line, "%s   %d%%", test_busy ? "Setting up the game files..." : job.c_str(),
+                    snprintf(line, sizeof line, "%s   %d%%", test_busy ? "正在初始化游戏文件..." : job.c_str(),
                              (int)(f * 100));
                     ImVec2 ls = g_font_small->CalcTextSizeA(sfs, FLT_MAX, 0, line);
                     fg->AddText(g_font_small, sfs, ImVec2((a.x + b.x - ls.x) * 0.5f, bb.y + 26 * sc), kColIvory, line);
@@ -1746,14 +1779,14 @@ extern "C" void launcher_run(const char *root) {
                         dl->AddLine(ImVec2(p.x + u * 0.35f, p.y + u * 0.8f), ImVec2(p.x + u * 0.85f, p.y + u * 0.2f), g, u * 0.13f);
                         ImGui::SetCursorPosX(x0 + 4 * s + u * 1.25f);
                     }
-                    ImGui::TextColored(ImVec4(0.45f, 0.94f, 0.78f, 1), "Game files ready");
+                    ImGui::TextColored(ImVec4(0.45f, 0.94f, 0.78f, 1), "游戏文件已就绪");
                     ImGui::SetCursorPosX(x0 + 4 * s);
-                    std::string sub = "Base v1.0.0";
+                    std::string sub = "本体 v1.0.0";
 #ifndef __APPLE__
-                    if (g_settings.hd_textures) sub += "  \xc2\xb7  4K Textures";
+                    if (g_settings.hd_textures) sub += "  ·  4K 纹理";
 #endif
 #ifdef _WIN32
-                    if (g_settings.reshade) sub += "  \xc2\xb7  ReShade";
+                    if (g_settings.reshade) sub += "  ·  ReShade";
 #endif
                     ImGui::TextColored(ImVec4(0.82f, 0.86f, 0.84f, 1), "%s", sub.c_str());
                 } else {
@@ -1761,9 +1794,9 @@ extern "C" void launcher_run(const char *root) {
                     float u = ImGui::GetTextLineHeight();
                     draw_diamond(dl, ImVec2(p.x + u * 0.4f, p.y + u * 0.5f), u * 0.32f, u * 0.32f, kColGoldBright);
                     ImGui::SetCursorPosX(x0 + 4 * s + u * 1.05f);
-                    ImGui::TextColored(ImVec4(0.98f, 0.78f, 0.42f, 1), "%s", busy ? "Setting up game files..." : status.c_str());
+                    ImGui::TextColored(ImVec4(0.98f, 0.78f, 0.42f, 1), "%s", busy ? "正在初始化游戏文件..." : status.c_str());
                     ImGui::SetCursorPosX(x0 + 4 * s);
-                    ImGui::TextColored(ImVec4(0.75f, 0.78f, 0.74f, 1), "Open Set Up Game Files to get started.");
+                    ImGui::TextColored(ImVec4(0.75f, 0.78f, 0.74f, 1), "打开「初始化游戏文件」即可开始。");
                 }
                 if (const char *f = getenv("LARECOMP_LAUNCHER_FONT")) {  // (test) which typeface this window shows
                     const char *b = strrchr(f, '/');
@@ -1782,7 +1815,7 @@ extern "C" void launcher_run(const char *root) {
                     ImVec2 vsz = font->CalcTextSizeA(vs, FLT_MAX, 0, ver.c_str());
                     text(ImVec2(right - vsz.x, y), vs, kColIvory, ver.c_str(), false);
 
-                    const char *nav_hint = "Up / Down: Navigate    Enter / A: Select";
+                    const char *nav_hint = "上下：移动    回车 / A：确认";
                     float hfs = fs * 0.84f;
                     ImVec2 hsz = font->CalcTextSizeA(hfs, FLT_MAX, 0, nav_hint);
                     text(ImVec2(right - hsz.x, y + vsz.y + 4 * s), hfs, IM_COL32(196, 204, 198, 225), nav_hint, false);
@@ -1792,13 +1825,13 @@ extern "C" void launcher_run(const char *root) {
                     pthread_mutex_unlock(&g_update_lock);
                     if (!upd.empty()) {
                         const char *arrow = font->FindGlyphNoFallback(0x2192) ? " \xe2\x86\x92" : " \xe2\x96\xb8";
-                        std::string pre = "Update available:  ", link = "DOWNLOAD " + tag_label(upd, false) + arrow;
+                        std::string pre = "有新版本可用：", link = "下载 " + tag_label(upd, false) + arrow;
                         float wp_w = font->CalcTextSizeA(fs, FLT_MAX, 0, pre.c_str()).x;
                         ImVec2 lsz = font->CalcTextSizeA(fs, FLT_MAX, 0, link.c_str());
                         ImVec2 lp(right - lsz.x, y - fs - 4 * s);
                         text(ImVec2(lp.x - wp_w, lp.y), fs, IM_COL32(200, 224, 240, 255), pre.c_str(), false);
                         ImGui::SetCursorScreenPos(lp);
-                        bool click = ImGui::InvisibleButton("update", lsz);
+                        bool click = ImGui::InvisibleButton("更新", lsz);
                         bool hover = ImGui::IsItemHovered();
                         ImU32 col = hover ? IM_COL32(255, 238, 150, 255) : IM_COL32(255, 214, 64, 255);
                         ImU32 col_b = hover ? IM_COL32(255, 196, 110, 255) : IM_COL32(255, 160, 50, 255);
