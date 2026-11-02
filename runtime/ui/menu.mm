@@ -312,7 +312,7 @@ void menu_apply_window_requests(void *win) {
         SDL_SetWindowFullscreen(w, g_settings.fullscreen);
     }
     if (g_amiibo_dialog.exchange(false)) {
-        static const SDL_DialogFileFilter f[] = {{"amiibo dump", "bin"}};
+        static const SDL_DialogFileFilter f[] = {{"amiibo 存档", "bin"}};
         SDL_ShowOpenFileDialog(amiibo_picked, NULL, w, f, 1, NULL, false);
     }
 }
@@ -765,7 +765,7 @@ static void tab_quit(float scale, bool in_game) {
     static int ask;  // 0: the two choices; 1: start screen?; 2: desktop?
     if (ask && (ImGui::IsKeyPressed(ImGuiKey_GamepadFaceRight, false) || ImGui::IsKeyPressed(ImGuiKey_Escape, false)))
         ask = 0;
-    const char *lost = in_game ? "\n\nProgress since your last save is lost." : "";
+    const char *lost = in_game ? "\n\n上次存档之后的进度将会丢失。" : "";
     char d1[200], d2[200];
     snprintf(d1, sizeof d1, "离开游戏并回到 Sky Recomp 启动界面。%s", lost);
     snprintf(d2, sizeof d2, "关闭 Sky Recomp。%s", lost);

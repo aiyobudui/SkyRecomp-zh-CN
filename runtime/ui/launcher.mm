@@ -39,6 +39,13 @@
 #ifndef ZH_PX_MENU
 #define ZH_PX_MENU 52
 #endif
+#ifndef ZH_PX_TITLE
+#define ZH_PX_TITLE 144  // (主标题：汉字视觉上比 Baloo 大，所以比原 92*2.3 小)
+#endif
+// 主标题（logo）。想保留英文原名就改回 "Sky Recomp"：它只占 1 个字形子集，换回英文也不占图集
+#ifndef ZH_LAUNCHER_TITLE
+#define ZH_LAUNCHER_TITLE "天空重编译"
+#endif
 #include "zh_glyphs.h"  // ZH_UI_GLYPHS：界面里实际用到的汉字
 
 extern "C" {
@@ -525,9 +532,8 @@ static bool build_choice_shown(void) {
 }
 static const char *const BUILD_NAMES[] = {"优先构建速度", "优先游戏性能"};
 static const char *const BUILD_DESC =
-    "How the game code is compiled from your game files. Both optimize everything and take a few minutes.\n\nFaster "
-    "build: a file still compiling after 5 minutes (a very slow machine) is restarted without optimization.\n\nFaster "
-    "game: no time limit.";
+    "游戏代码如何从你的游戏文件编译而来。两种方式都会对全部内容做优化，都需要几分钟。\n\n优先构建速度："
+    "某个文件编译超过 5 分钟（非常慢的机器）时会放弃优化重新编译。\n\n优先游戏性能：没有时间限制。";
 
 // ------------------------------------------------------------------ folder dialog (SDL calls back on any thread)
 static void SDLCALL picked(void *, const char *const *files, int) {
@@ -1094,7 +1100,7 @@ static void prelaunch_tab(float sc) {
         ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.74f, 0.26f, 0.22f, 1.0f));
         if (ImGui::Button("删除游戏文件", ImVec2(230 * sc, 0))) {
             bool ok = rt_remove_game_files(g_root.c_str());  // (runtime/paths.c: only what the extraction made)
-            set_job(ok ? "游戏文件已删除。" : "Could not delete the game files (outside Sky Recomp's data folder).", !ok);
+            set_job(ok ? "游戏文件已删除。" : "无法删除游戏文件（它们不在 Sky Recomp 的数据目录内）。", !ok);
             g_files_deleted = true, gb = -1;
             ImGui::CloseCurrentPopup();
         }
@@ -1136,7 +1142,7 @@ static void prelaunch_tab(float sc) {
     ImGui::TextDisabled("自定义系统字体是可选项。你可以导入兼容的 .bfttf 或 .ttf 字体文件，用于对话与手柄图标，也可以直接使用内置后备字体。");
     ImGui::PopTextWrapPos();
     if (!g_font_msg.empty()) ImGui::TextColored(ImVec4(0.45f, 0.92f, 0.65f, 1.0f), "%s", g_font_msg.c_str());
-    static const SDL_DialogFileFilter font_f[] = {{"Font files", "bfttf;ttf"}};
+    static const SDL_DialogFileFilter font_f[] = {{"字体文件", "bfttf;ttf"}};
     if (ImGui::Button("导入字体文件")) SDL_ShowOpenFileDialog(picked_fonts, NULL, g_launcher_win, font_f, 1, NULL, true);
     if (fs || fe) {
         ImGui::SameLine();
@@ -1214,8 +1220,16 @@ extern "C" void launcher_run(const char *root) {
         io.Fonts->TexDesiredWidth = 4096;  // (汉字字形多，图集要给足宽度)
         g_font_small = io.Fonts->AddFontFromFileTTF(zf, ZH_PX_SMALL, NULL, zh_ranges.Data);
         g_font_menu = io.Fonts->AddFontFromFileTTF(zf, ZH_PX_MENU, NULL, zh_ranges.Data);
+        // 主标题：只用标题这几个字建字形子集（整段 CJK 装进 144px 字号会把图集撑爆）
+        static ImVector<ImWchar> zh_title_ranges;
+        if (zh_title_ranges.empty()) {
+            ImFontGlyphRangesBuilder tb;
+            tb.AddText(ZH_LAUNCHER_TITLE);
+            tb.BuildRanges(&zh_title_ranges);
+        }
+        g_font_title = io.Fonts->AddFontFromFileTTF(zf, ZH_PX_TITLE, NULL, zh_title_ranges.Data);
     }
-    for (const char *p : fonts) {  // (标题是英文 logo，仍用 Baloo 2)
+    for (const char *p : fonts) {  // (主标题已由中文字体接管，这里的 Baloo 2 只是兜底)
         if (g_font_title || !*p || !file_exists(p)) continue;
         bool b2 = p == own.c_str() || getenv("LARECOMP_LAUNCHER_FONT");
         g_font_title = io.Fonts->AddFontFromFileTTF(p, 92 * (b2 ? 2.3f : 1), NULL, ranges);
@@ -1250,7 +1264,7 @@ extern "C" void launcher_run(const char *root) {
     std::string status = check_game_files(g_root);
     if (status.empty()) load_background(dev);
     std::vector<std::string> seeds = list_seeds();
-    std::vector<std::string> choices = {"Vanilla"};
+    std::vector<std::string> choices = {"原版"};
     choices.insert(choices.end(), seeds.begin(), seeds.end());
     int choice = 0;
     for (size_t i = 0; i < seeds.size(); i++)
@@ -1316,7 +1330,7 @@ extern "C" void launcher_run(const char *root) {
         if (g_play_seed_req) {  // the Randomizer tab's Play: that seed, then PLAY as if pressed (first-launch questions)
             g_play_seed_req = false;
             seeds = list_seeds();
-            choices = {"Vanilla"};
+            choices = {"原版"};
             choices.insert(choices.end(), seeds.begin(), seeds.end());
             choice = 0;
             for (size_t i = 0; i < seeds.size(); i++)
@@ -1417,14 +1431,14 @@ extern "C" void launcher_run(const char *root) {
                                    IM_COL32(238, 198, 92, 185));
                 ImGui::PushFont(g_font_small);
                 float ey_fs = ImGui::GetFontSize() * 0.78f;
-                const char *eyebrow = "THE LEGEND OF ZELDA  \xc2\xb7  SKYWARD SWORD HD";
+                const char *eyebrow = "塞尔达传说  ·  御天之剑 HD";
                 dl->AddText(g_font_small, ey_fs, ImVec2(wp.x + x0 + 62 * s, ey_y + 1.5f * s), IM_COL32(4, 10, 18, 160), eyebrow);
                 dl->AddText(g_font_small, ey_fs, ImVec2(wp.x + x0 + 60 * s, ey_y), kColGold, eyebrow);
                 ImGui::PopFont();
 
                 ImGui::SetCursorPos(ImVec2(x0, 114 * s));
                 ImGui::PushFont(g_font_title);
-                const char *t = "Sky Recomp";
+                const char *t = ZH_LAUNCHER_TITLE;
                 ImVec2 p = ImGui::GetCursorScreenPos();
                 ImVec2 tsz = ImGui::CalcTextSize(t);
                 text_fx(dl, ImGui::GetFont(), ImGui::GetFontSize(), p, IM_COL32(255, 238, 142, 255),
@@ -1554,7 +1568,7 @@ extern "C" void launcher_run(const char *root) {
                     page = MAIN, g_refocus = SETTINGS;
                     std::string cur = choices[choice];
                     seeds = list_seeds();
-                    choices = {"Vanilla"};
+                    choices = {"原版"};
                     choices.insert(choices.end(), seeds.begin(), seeds.end());
                     choice = 0;
                     for (size_t i = 0; i < choices.size(); i++)
@@ -1620,7 +1634,7 @@ extern "C" void launcher_run(const char *root) {
                 };
 
                 std::string src_d = "选择包含已解包游戏文件的文件夹（本体 1.0.0 版本）。Sky Recomp 不包含任何游戏资源或受版权保护的数据。";
-                if (!src.empty()) src_d += "\n\nSelected folder:\n" + src;
+                if (!src.empty()) src_d += "\n\n已选择的文件夹：\n" + src;
 
                 const std::string &job_line = job;
                 std::string ex_d = "复制所需文件、生成本地数据归档，并把游戏代码编译成适用于你这台电脑的原生库。此步骤仅在首次初始化时执行一次，且不会改动你的源文件夹。";

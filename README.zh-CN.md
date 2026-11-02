@@ -25,13 +25,12 @@
 | 选项行、页脚操作提示（开/关、回车确认等） | `runtime/ui/option_rows.mm` | ✅ 已汉化 |
 | 屏幕键盘（OSK） | `runtime/ui/osk.mm` | ✅ 已汉化 |
 
-共替换 **337 处**文案（唯一字符串约 200 条）。
+共替换 **347 处**文案（唯一字符串约 210 条）。
 
 ### 刻意保留英文的部分
 
 | 内容 | 原因 |
 |---|---|
-| `THE LEGEND OF ZELDA · SKYWARD SWORD HD`、`Sky Recomp` | 游戏 logo 与产品名，本地化的通行做法是保留 |
 | `4K`、`ReShade`、`MetalFX`、`AMD FSR 1`、`NVIDIA NIS`、`SMAA`、`FXAA`、`amiibo`、`Xbox/PlayStation/Nintendo` | 专有名词与商标 |
 | `GPU` / `CPU` / `RAM` / `VRAM` / `FPS` | 性能覆盖层的通用缩写 |
 | 存档编辑器、随机化、传送、外观、Mods 标签页 | **本版本根本不可达**（见下） |
@@ -113,8 +112,10 @@ make -j8 B=build/win-release RELEASE=1 build/win-release/skyrecomp.exe
   `SKYRECOMP_ZH_FONT` 环境变量 → `C:/Windows/Fonts/msyh.ttc`（微软雅黑）→ `msyhbd.ttc` → `simhei.ttf`
   → macOS `PingFang.ttc` → Linux `NotoSansCJK-Regular.ttc` → `fonts/NotoSansSC-Regular.ttf` → `fonts/msyh.ttc`
 - 找不到中文字体时**自动回退**到原来的英文方案（不会崩，只是显示英文）。
-- 字形范围不是整段 CJK 区间，而是由 `runtime/ui/zh_glyphs.h` 里的 **642 个实际用到的字符**生成，
+- 字形范围不是整段 CJK 区间，而是由 `runtime/ui/zh_glyphs.h` 里的 **654 个实际用到的字符**生成，
   这样 4 套字号同时加载也不会把字形图集撑爆（`TexDesiredWidth = 4096`）。
+- 主标题 `Sky Recomp` 字号大（144px），若把整套字库都塞进这个字号会让图集涨到几十 MB，
+  因此改为**只按标题这几个字**生成字形子集（`ImFontGlyphRangesBuilder::AddText(ZH_LAUNCHER_TITLE)`）。
 
 想换字体或调字号，改文件顶部的宏即可（不用改逻辑）：
 
@@ -122,6 +123,8 @@ make -j8 B=build/win-release RELEASE=1 build/win-release/skyrecomp.exe
 |---|---|---|---|
 | `ZH_PX_SMALL` | `launcher.mm` 顶部 | 30 | 启动器小字 |
 | `ZH_PX_MENU` | `launcher.mm` 顶部 | 52 | 启动器按钮/标题字 |
+| `ZH_PX_TITLE` | `launcher.mm` 顶部 | 144 | 主标题 logo |
+| `ZH_LAUNCHER_TITLE` | `launcher.mm` 顶部 | `"天空重编译"` | 主标题文案（改回 `"Sky Recomp"` 即保留英文 logo） |
 | `ZH_MENU_PX` | `menu.mm` 顶部 | 33 | ESC 面板正文 |
 | `ZH_MENU_PX_BIG` | `menu.mm` 顶部 | 61 | ESC 面板页签与标题 |
 | `ZH_OVERLAY_PX` | `menu.mm` 顶部 | 30 | 覆盖层/键盘 |
