@@ -30,6 +30,9 @@ extracted/*.id
 
 # Locally generated recompiled source code
 ssh_generated/
+/generated/
+/generated-*/
+/gamelib/
 
 # Build artifacts, caches, and local saves
 /skyrecomp.exe
@@ -63,6 +66,20 @@ tools/venv/
 Thumbs.db
 .vs/
 .vscode/
+
+# 汉化工具导出的临时清单（tools/zh_runs.py 等）
+tools/_*.txt
+/_*.txt
+
+# 本地备份与调试残留
+*.orig
+*.bak
+*.pdb
+*.ilk
+*.dmp
+
+# 汉化时保留的英文原版界面源码（本地对照用，不随仓库分发）
+/runtime/ui.en-backup/
 
 # Downloaded compilers
 zig/

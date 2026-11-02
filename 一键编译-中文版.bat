@@ -4,43 +4,32 @@ setlocal
 title SkyRecomp 简体中文界面 - 一键编译
 
 rem =====================================================================
-rem  把汉化源码编译成 skyrecomp.exe，并（可选）覆盖到游戏目录
+rem  编译汉化后的 skyrecomp.exe，并把中间文件清干净
 rem  依赖：MSYS2 已安装在 C:\msys64（UCRT64 环境）
-rem  说明：官方发行包用的就是 MSYS2 UCRT64 的 SDL3 / FFmpeg / shaderc，
-rem        DLL 版本完全一致，所以不需要跑耗时的 make deps-windows
+rem
+rem  流程：编译 -> 把成品拷到本目录 -> 删除 build 等临时文件
+rem  不碰游戏目录，编完自己把 skyrecomp.exe 拖过去覆盖即可
 rem =====================================================================
 
 set "SRC=%~dp0"
 if "%SRC:~-1%"=="\" set "SRC=%SRC:~0,-1%"
-for %%I in ("%SRC%\..\SkyRecomp-v2.1-Windows") do set "GAME=%%~fI"
-set "OUT=%SRC%\build\win-release\skyrecomp.exe"
+set "BUILD=%SRC%\build\win-release"
+set "OUT=%BUILD%\skyrecomp.exe"
+set "FINAL=%SRC%\skyrecomp.exe"
 set "JOBS=8"
 
 echo ============================================================
-echo    SkyRecomp 简体中文界面 - 本地编译
+echo    SkyRecomp 简体中文界面 - 一键编译
 echo ============================================================
 echo    源码目录：%SRC%
-echo    游戏目录：%GAME%
 echo.
 
 if not exist "C:\msys64\usr\bin\bash.exe" goto :no_msys
-if not exist "%SRC%\Makefile"            goto :no_src
-if not exist "%SRC%\runtime\ui\zh_glyphs.h" goto :no_glyphs
-if not exist "%GAME%\skyrecomp.exe"      goto :no_game
-
-rem ---------------------------------------------------------------- 备份
-echo [1/3] 备份原版 exe
-if exist "%GAME%\skyrecomp.exe.orig" (
-    echo        已存在 skyrecomp.exe.orig，跳过备份
-) else (
-    copy /y "%GAME%\skyrecomp.exe" "%GAME%\skyrecomp.exe.orig" >nul
-    if errorlevel 1 goto :backup_fail
-    echo        已备份为 skyrecomp.exe.orig
-)
+if not exist "%SRC%\Makefile"                goto :no_src
+if not exist "%SRC%\runtime\ui\zh_glyphs.h"  goto :no_glyphs
 
 rem ---------------------------------------------------------------- 编译
-echo.
-echo [2/3] 编译中（首次约 3-8 分钟，请不要关闭窗口）...
+echo [1/2] 编译中（首次约 3-8 分钟，请不要关闭窗口）...
 echo ------------------------------------------------------------
 set "MSYSTEM=UCRT64"
 set "CHERE_INVOKING=1"
@@ -50,30 +39,47 @@ echo ------------------------------------------------------------
 
 if not exist "%OUT%" goto :no_output
 
+rem ---------------------------------------------------------------- 提取成品 + 清理
 echo.
-echo [3/3] 编译成功
-for %%I in ("%OUT%") do echo        产物：%%~fI
-for %%I in ("%OUT%") do echo        大小：%%~zI 字节
-echo.
-choice /c YN /n /m "现在覆盖到游戏目录吗？(Y=覆盖 / N=先不覆盖) "
-if errorlevel 2 goto :keep
+echo [2/2] 提取成品并清理临时文件
 
-copy /y "%OUT%" "%GAME%\skyrecomp.exe" >nul
+copy /y "%OUT%" "%FINAL%" >nul
 if errorlevel 1 goto :copy_fail
+for %%I in ("%FINAL%") do echo        成品：%%~fI
+for %%I in ("%FINAL%") do echo        大小：%%~zI 字节
+
+rem 编译中间文件（.o、.a、链接临时目录等）
+if exist "%SRC%\build" (
+    rmdir /s /q "%SRC%\build" 2>nul
+    if exist "%SRC%\build" (
+        echo        注意：build 目录有文件被占用，未能全部删除
+    ) else (
+        echo        已删除 build\
+    )
+)
+
+rem 生成代码 / 临时清单 / 缓存
+for %%D in ("%SRC%\generated" "%SRC%\tools\__pycache__") do (
+    if exist "%%~D" (
+        rmdir /s /q "%%~D" 2>nul
+        if not exist "%%~D" echo        已删除 %%~nxD\
+    )
+)
+del /q "%SRC%\tools\_*.txt" 2>nul
+del /q "%SRC%\*.log" 2>nul
 
 echo.
 echo ============================================================
-echo  完成。直接启动游戏就能看到中文界面。
+echo  完成
 echo.
-echo  原版备份：%GAME%\skyrecomp.exe.orig
-echo  想回滚：把 skyrecomp.exe.orig 改名为 skyrecomp.exe
+echo  成品位置：%FINAL%
+echo.
+echo  应用方法：把上面这个 skyrecomp.exe 复制到游戏安装目录，
+echo            覆盖同名文件即可。DLL、ini、mods、reshade 都不用动。
+echo.
+echo  提示：临时文件已清理，下次编译会全量重编（约 3-8 分钟）。
+echo        想保留增量编译就别删 build 目录，改本脚本最后一段即可。
 echo ============================================================
-goto :end
-
-:keep
-echo.
-echo 已保留编译产物，未覆盖游戏目录：
-echo   %OUT%
 goto :end
 
 rem ---------------------------------------------------------------- 错误分支
@@ -95,29 +101,18 @@ echo [错误] 缺少中文字形头文件：runtime\ui\zh_glyphs.h
 echo        在源码目录执行：python tools/zh_glyphs.py
 goto :fail
 
-:no_game
-echo [错误] 没找到游戏目录：%GAME%\skyrecomp.exe
-echo        如果你的游戏装在别处，请手动把编译产物
-echo        %OUT%
-echo        复制过去覆盖 skyrecomp.exe
-goto :fail
-
-:backup_fail
-echo [错误] 备份失败，请确认游戏没有在运行
-goto :fail
-
 :build_fail
 echo.
-echo [失败] 编译没有通过。请把上面红色/报错的几行发给我。
+echo [失败] 编译没有通过。请把上面报错的几行发给我。
+echo        中间文件已保留在 build\，方便下次增量重试。
 goto :fail
 
 :no_output
 echo [失败] make 执行完了，但没有生成 %OUT%
-echo        请在 UCRT64 终端里手动执行一次 make 看具体报错
 goto :fail
 
 :copy_fail
-echo [失败] 覆盖失败，游戏可能正在运行，关掉后重试
+echo [失败] 无法把成品拷到源码目录（文件被占用？）
 goto :fail
 
 :fail

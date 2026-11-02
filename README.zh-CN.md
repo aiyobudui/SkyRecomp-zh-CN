@@ -61,8 +61,13 @@ static const int order[] = {8, 0, 1, 6, 5, 9};  // Controls, Video, Audio, Gamep
 
 双击源码目录里的 **`一键编译-中文版.bat`**。
 
-它做三件事：备份原版 exe → 调用 MSYS2 编译 → 询问是否覆盖到游戏目录。
-首次约 3–8 分钟，之后增量编译只重编改过的文件，几十秒。
+它做两件事：
+
+1. 调用 MSYS2 编译出 `skyrecomp.exe`
+2. 把成品拷到源码根目录，然后**删掉 `build/` 等编译中间文件**
+
+**不会自动覆盖游戏目录**（避免误伤），编完自己把 `skyrecomp.exe` 拖过去即可。
+首次约 3–8 分钟；因为清掉了 `build/`，之后也是全量重编。想保留增量编译，把脚本最后那段 `rmdir` 注释掉即可。
 
 ### 方式二：手动命令
 
@@ -88,11 +93,13 @@ make -j8 B=build/win-release RELEASE=1 build/win-release/skyrecomp.exe
 
 ## 3. 安装与回滚
 
-把 `build/win-release/skyrecomp.exe` 复制到游戏安装目录，覆盖同名 `skyrecomp.exe`。
+把源码根目录的 `skyrecomp.exe` 复制到游戏安装目录，覆盖同名文件。
 其余文件（`SDL3.dll`、`avcodec-*.dll`、`skyrecomp.ini`、`mods/`、`reshade*`、`fonts/`、`extracted/`、`skygame.dll` 等）**都不要动**。
 
-- **回滚**：改用一键 bat 编译时，脚本会先把原版存成 `skyrecomp.exe.orig`，改名回去即可。
+- **先备份**：覆盖前把游戏目录原来的 `skyrecomp.exe` 改名成 `skyrecomp.exe.orig`。
+- **回滚**：把 `skyrecomp.exe.orig` 改回 `skyrecomp.exe` 即可。
 - **存档**：与本汉化无关，但覆盖前建议顺手存一下游戏进度。
+- **不要动** `extracted/skygame.dll` 与它的 `.id`：编译产物的 `GAMELIB_ID` 与之一致，改了会触发十几分钟的重编译。
 
 界面语言无需额外设置，中文字符串是编译进程序的；游戏内文本仍由 `skyrecomp.ini` 的 `language` 决定。
 
