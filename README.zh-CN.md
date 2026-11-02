@@ -53,26 +53,48 @@ static const int order[] = {8, 0, 1, 6, 5, 9};  // Controls, Video, Audio, Gamep
 
 ---
 
-## 2. 编译（Windows）
+## 2. 怎么用（Windows）
 
-需要 **MSYS2 UCRT64** 环境，包含 `clang`、`lld`、`make`。
+汉化改的是源码，**必须先编译成 `skyrecomp.exe` 才会生效**，没有可以直接替换的文件。
+
+### 方式一：双击（推荐）
+
+双击源码目录里的 **`一键编译-中文版.bat`**。
+
+它做三件事：备份原版 exe → 调用 MSYS2 编译 → 询问是否覆盖到游戏目录。
+首次约 3–8 分钟，之后增量编译只重编改过的文件，几十秒。
+
+### 方式二：手动命令
+
+在 **MSYS2 UCRT64** 终端里：
 
 ```bash
-# 1. 装好依赖（SDL3 + LGPL FFmpeg，脚本会下载并固定校验）
-make deps-windows
-
-# 2. 编译启动器
-make build/skyrecomp.exe
+cd "/d/Games/11.3/Skyward Sword HD/SkyRecomp-zh-CN"
+make -j8 B=build/win-release RELEASE=1 build/win-release/skyrecomp.exe
 ```
 
-产物：`build/skyrecomp.exe`。
+产物：`build/win-release/skyrecomp.exe`。`RELEASE=1` 与原版一致（无控制台窗口，日志写入 `skyrecomp.log`）。
 
-## 3. 安装
+> **为什么不用跑 `make deps-windows`**
+> 那个目标是从源码编译一份 LGPL FFmpeg，耗时半小时以上，目的是避开 MSYS2 包里的 GPL 编解码器。
+> 实测官方发行包里的 DLL（`avcodec-63` / `avformat-63` / `avutil-61` / `swscale-10` / `SDL3.dll` /
+> `libshaderc_shared.dll`）与 MSYS2 UCRT64 的**文件名和版本完全一致**，所以直接链接 MSYS2 的包即可，
+> 生成的 exe 与现有那些 DLL 完全兼容，一个 DLL 都不用换。自己玩不受 GPL 影响，只有再分发时才需要考虑。
 
-把编译出的 `skyrecomp.exe` 复制到你现有 SkyRecomp 安装目录，**覆盖同名文件**即可。
-其余文件（`skygame.dll`、`skyrecomp.ini`、`mods/`、`reshade*`、`fonts/` 等）都不要动。
+### 方式三：不想在本机编译
 
-首次启动会读到已有的 `skyrecomp.ini`，界面语言无需额外设置（中文字符串是编译进程序的）。
+可以在 fork 里加一个 GitHub Actions 工作流（`msys2/setup-msys2` + 上面那条 make），
+让服务器编译完把 exe 传到 Artifacts 里下载。需要的话我可以补这个 workflow。
+
+## 3. 安装与回滚
+
+把 `build/win-release/skyrecomp.exe` 复制到游戏安装目录，覆盖同名 `skyrecomp.exe`。
+其余文件（`SDL3.dll`、`avcodec-*.dll`、`skyrecomp.ini`、`mods/`、`reshade*`、`fonts/`、`extracted/`、`skygame.dll` 等）**都不要动**。
+
+- **回滚**：改用一键 bat 编译时，脚本会先把原版存成 `skyrecomp.exe.orig`，改名回去即可。
+- **存档**：与本汉化无关，但覆盖前建议顺手存一下游戏进度。
+
+界面语言无需额外设置，中文字符串是编译进程序的；游戏内文本仍由 `skyrecomp.ini` 的 `language` 决定。
 
 ---
 
